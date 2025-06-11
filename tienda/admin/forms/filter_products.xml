@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<form>
+    <fields name="filter">
+        <field
+            name="search"
+            type="text"
+            label="COM_TIENDA_SEARCH_FILTER_LABEL"
+            description="COM_TIENDA_SEARCH_FILTER_DESC"
+            hint="JSEARCH_FILTER"
+            class="js-stools-search-string"
+        />
+
+        <field
+            name="product_id_from"
+            type="text"
+            label="COM_TIENDA_PRODUCT_ID_FROM_LABEL"
+            description="COM_TIENDA_PRODUCT_ID_FROM_DESC"
+        />
+        <field
+            name="product_id_to"
+            type="text"
+            label="COM_TIENDA_PRODUCT_ID_TO_LABEL"
+            description="COM_TIENDA_PRODUCT_ID_TO_DESC"
+        />
+
+        <field
+            name="category_id"
+            type="category"
+            extension="com_tienda"
+            label="COM_TIENDA_CATEGORY_FILTER_LABEL"
+            description="COM_TIENDA_CATEGORY_FILTER_DESC"
+            onchange="this.form.submit();"
+            >
+            <option value="">JOPTION_SELECT_CATEGORY</option>
+        </field>
+
+        <field
+            name="manufacturer_id"
+            type="sql"
+            label="COM_TIENDA_MANUFACTURER_FILTER_LABEL"
+            description="COM_TIENDA_MANUFACTURER_FILTER_DESC"
+            query="SELECT manufacturer_id AS value, manufacturer_name AS manufacturer_id FROM #__tienda_manufacturers ORDER BY manufacturer_name"
+            key_field="value"
+            value_field="manufacturer_id"
+            onchange="this.form.submit();"
+            >
+            <option value="">JOPTION_SELECT_MANUFACTURER</option>
+        </field>
+
+        <field
+            name="product_enabled"
+            type="list"
+            label="COM_TIENDA_ENABLED_STATE_LABEL"
+            description="COM_TIENDA_ENABLED_STATE_DESC"
+            onchange="this.form.submit();"
+            >
+            <option value="">JOPTION_SELECT_PUBLISHED</option>
+            <option value="1">JPUBLISHED</option>
+            <option value="0">JUNPUBLISHED</option>
+        </field>
+
+        <field
+            name="product_ships"
+            type="list"
+            label="COM_TIENDA_SHIPS_FILTER_LABEL"
+            description="COM_TIENDA_SHIPS_FILTER_DESC"
+            onchange="this.form.submit();"
+            >
+            <option value="">COM_TIENDA_SELECT_SHIPPING_STATUS</option>
+            <option value="1">COM_TIENDA_YES</option>
+            <option value="0">COM_TIENDA_NO</option>
+        </field>
+
+        <field
+            name="tax_class_id"
+            type="sql"
+            label="COM_TIENDA_TAX_CLASS_FILTER_LABEL"
+            description="COM_TIENDA_TAX_CLASS_FILTER_DESC"
+            query="SELECT tax_class_id AS value, tax_class_name AS tax_class_id FROM #__tienda_taxclasses ORDER BY tax_class_name"
+            key_field="value"
+            value_field="tax_class_id"
+            onchange="this.form.submit();"
+            >
+            <option value="">JOPTION_SELECT_TAX_CLASS</option>
+        </field>
+
+        <!-- Add placeholders for other potential filters like SKU, price range, quantity range -->
+        <!-- These might need custom field types or more complex SQL if they are not direct lookups -->
+
+    </fields>
+
+    <fields name="list">
+        <field
+            name="fullordering"
+            type="list"
+            label="JGLOBAL_SORT_BY"
+            description="JGLOBAL_SORT_BY"
+            onchange="this.form.submit();"
+            default="tbl.product_name ASC"
+            validate="options"
+            >
+            <option value="">JGLOBAL_SORT_BY</option>
+            <option value="tbl.product_id ASC">COM_TIENDA_ID_ASC</option>
+            <option value="tbl.product_id DESC">COM_TIENDA_ID_DESC</option>
+            <option value="tbl.product_name ASC">COM_TIENDA_NAME_ASC</option>
+            <option value="tbl.product_name DESC">COM_TIENDA_NAME_DESC</option>
+            <option value="tbl.product_sku ASC">COM_TIENDA_SKU_ASC</option>
+            <option value="tbl.product_sku DESC">COM_TIENDA_SKU_DESC</option>
+            <option value="calculated_price ASC">COM_TIENDA_PRICE_ASC</option>
+            <option value="calculated_price DESC">COM_TIENDA_PRICE_DESC</option>
+            <option value="current_stock ASC">COM_TIENDA_QUANTITY_ASC</option>
+            <option value="current_stock DESC">COM_TIENDA_QUANTITY_DESC</option>
+            <option value="tbl.ordering ASC">COM_TIENDA_ORDERING_ASC</option>
+            <option value="tbl.ordering DESC">COM_TIENDA_ORDERING_DESC</option>
+            <option value="tbl.product_enabled ASC">COM_TIENDA_ENABLED_ASC</option>
+            <option value="tbl.product_enabled DESC">COM_TIENDA_ENABLED_DESC</option>
+            <option value="tbl.product_rating ASC">RATING_ASC</option>
+            <option value="tbl.product_rating DESC">RATING_DESC</option>
+        </field>
+
+        <field
+            name="limit"
+            type="limitbox"
+            label="JGLOBAL_LIMIT"
+            description="JGLOBAL_LIMIT_DESC"
+            class="input-mini"
+            default="25"
+            onchange="this.form.submit();"
+        />
+    </fields>
+</form>
