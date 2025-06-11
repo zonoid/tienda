@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<form>
+    <fieldset name="basic_info" label="COM_TIENDA_PRODUCT_BASIC_INFORMATION">
+        <field name="product_name" type="text" label="COM_TIENDA_PRODUCT_NAME" required="true" size="40" />
+        <field name="product_alias" type="text" label="COM_TIENDA_ALIAS" description="COM_TIENDA_ALIAS_DESC" size="40" />
+        <field name="product_sku" type="text" label="COM_TIENDA_SKU" description="COM_TIENDA_SKU_DESC" size="40" />
+        <field name="product_enabled" type="radio" default="1" label="JSTATUS" class="btn-group btn-group-yesno">
+            <option value="1">JPUBLISHED</option>
+            <option value="0">JUNPUBLISHED</option>
+        </field>
+        <field name="category_id" type="categoryedit" extension="com_tienda" label="COM_TIENDA_CATEGORY" description="COM_TIENDA_SELECT_PRODUCT_CATEGORY" required="true" />
+        <!-- TODO: Multiple categories might need a custom field type or different handling -->
+        <field name="manufacturer_id" type="sql" label="COM_TIENDA_MANUFACTURER" query="SELECT manufacturer_id AS value, manufacturer_name AS manufacturer_id FROM #__tienda_manufacturers ORDER BY manufacturer_name">
+            <option value="">JOPTION_SELECT_MANUFACTURER</option>
+        </field>
+    </fieldset>
+
+    <fieldset name="description" label="COM_TIENDA_DESCRIPTION_AND_IMAGES">
+        <field name="product_description_short" type="textarea" label="COM_TIENDA_SHORT_DESCRIPTION" description="COM_TIENDA_SHORT_DESCRIPTION_DESC" rows="5" cols="40" />
+        <field name="product_description" type="editor" buttons="true" hide="pagebreak,readmore" label="COM_TIENDA_FULL_DESCRIPTION" description="COM_TIENDA_FULL_DESCRIPTION_DESC" filter="safehtml" />
+        <field name="product_full_image" type="media" directory="com_tienda/products" label="COM_TIENDA_MAIN_IMAGE_LABEL" description="COM_TIENDA_MAIN_IMAGE_DESC" />
+        <!-- TODO: Add product gallery management field -->
+        <field name="product_images_path" type="text" label="COM_TIENDA_IMAGE_GALLERY_OVERRIDE_PATH_LABEL" description="COM_TIENDA_IMAGE_GALLERY_OVERRIDE_PATH_DESC" size="40" />
+    </fieldset>
+
+    <fieldset name="pricing" label="COM_TIENDA_PRICING">
+        <field name="product_price" type="number" label="COM_TIENDA_BASE_PRICE" description="COM_TIENDA_BASE_PRICE_DESC" step="any" />
+        <!-- TODO: This single price field is a simplification. Full price management (TiendaTableProductPrices) needs a custom form field type or subform -->
+        <field name="tax_class_id" type="sql" label="COM_TIENDA_TAX_CLASS" query="SELECT tax_class_id AS value, tax_class_name AS tax_class_id FROM #__tienda_taxclasses ORDER BY tax_class_name">
+            <option value="">JOPTION_SELECT_TAX_CLASS</option>
+        </field>
+    </fieldset>
+
+    <fieldset name="inventory_shipping" label="COM_TIENDA_INVENTORY_AND_SHIPPING">
+        <field name="product_check_inventory" type="radio" default="0" label="COM_TIENDA_CHECK_INVENTORY_LABEL" description="COM_TIENDA_CHECK_INVENTORY_DESC" class="btn-group btn-group-yesno">
+            <option value="1">JYES</option>
+            <option value="0">JNO</option>
+        </field>
+        <field name="product_quantity" type="number" label="COM_TIENDA_BASE_QUANTITY_LABEL" description="COM_TIENDA_BASE_QUANTITY_DESC" step="1" />
+        <!-- TODO: Quantity per attribute combination needs custom field type or subform -->
+        <field name="product_ships" type="radio" default="0" label="COM_TIENDA_REQUIRES_SHIPPING_LABEL" description="COM_TIENDA_REQUIRES_SHIPPING_DESC" class="btn-group btn-group-yesno">
+            <option value="1">JYES</option>
+            <option value="0">JNO</option>
+        </field>
+        <field name="product_weight" type="number" label="COM_TIENDA_WEIGHT_LABEL" description="COM_TIENDA_WEIGHT_DESC" step="any" />
+        <field name="length" type="number" label="COM_TIENDA_LENGTH_LABEL" step="any" />
+        <field name="width" type="number" label="COM_TIENDA_WIDTH_LABEL" step="any" />
+        <field name="height" type="number" label="COM_TIENDA_HEIGHT_LABEL" step="any" />
+    </fieldset>
+
+    <fieldset name="display_options" label="COM_TIENDA_DISPLAY_OPTIONS">
+        <field name="product_layout" type="sql" label="COM_TIENDA_PRODUCT_LAYOUT_OVERRIDE_LABEL" query="SELECT '' AS value, 'Use Default' AS product_layout UNION SELECT DISTINCT layout_file AS value, layout_file AS product_layout FROM #__tienda_productlayouts ORDER BY layout_file">
+             <!-- TODO: This query needs to be dynamic based on available layout files. For now, a placeholder or manual list might be needed. -->
+            <option value="">COM_TIENDA_USE_DEFAULT_LAYOUT</option>
+        </field>
+        <field name="product_class_suffix" type="text" label="COM_TIENDA_PRODUCT_CLASS_SUFFIX_LABEL" description="COM_TIENDA_PRODUCT_CLASS_SUFFIX_DESC" />
+    </fieldset>
+
+    <fieldset name="metadata" label="JGLOBAL_FIELDSET_METADATA_OPTIONS">
+        <field name="meta_title" type="text" label="JFIELD_META_TITLE_LABEL" description="JFIELD_META_TITLE_DESC" size="40" />
+        <field name="meta_description" type="textarea" label="JFIELD_META_DESCRIPTION_LABEL" description="JFIELD_META_DESCRIPTION_DESC" rows="3" cols="40" />
+        <field name="meta_keywords" type="textarea" label="JFIELD_META_KEYWORDS_LABEL" description="JFIELD_META_KEYWORDS_DESC" rows="3" cols="40" />
+    </fieldset>
+
+    <!-- TODO: Fieldset for EAV Attributes - this will require dynamic field generation or custom field types -->
+    <fieldset name="eav_attributes" label="COM_TIENDA_CUSTOM_FIELDS">
+        <field name="eav_placeholder" type="note" label="COM_TIENDA_EAV_FIELDS_NOTE" description="COM_TIENDA_EAV_FIELDS_HERE_DESC" />
+    </fieldset>
+
+    <!-- Hidden fields -->
+    <field name="product_id" type="hidden" />
+    <field name="created_date" type="hidden" />
+    <field name="modified_date" type="hidden" />
+
+</form>

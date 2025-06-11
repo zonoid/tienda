@@ -102,13 +102,38 @@ class ProductHelper
      * @param float $num The rating number (e.g., 3.5)
      * @param mixed $viewObject Deprecated
      * @param bool $clickable Deprecated
-     * @param string $layout Deprecated
-     * @return string Placeholder string for rating
-     */
-    public static function getRatingImage($num, $viewObject = null, $clickable = false , $layout = 'product_rating')
+    public static function getRatingImage($ratingValue, $totalStars = 5)
     {
-        Factory::getApplication()->enqueueMessage('ProductHelper::getRatingImage needs refactoring to return data for a layout/view to render, not direct HTML.', 'notice');
-        return htmlspecialchars((string)$num, ENT_QUOTES, 'UTF-8') . '/5 ' . Text::_('COM_TIENDA_STARS') . ' <!-- TODO: Implement image/SVG based rating display -->';
+        $ratingValue = (float)$ratingValue;
+        $starValue = '0'; // Default to 0 stars
+
+        if ($ratingValue <= 0) { $starValue = '0'; }
+        elseif ($ratingValue <= 0.5) { $starValue = '0.5'; }
+        elseif ($ratingValue <= 1.0) { $starValue = '1'; }
+        elseif ($ratingValue <= 1.5) { $starValue = '1.5'; }
+        elseif ($ratingValue <= 2.0) { $starValue = '2'; }
+        elseif ($ratingValue <= 2.5) { $starValue = '2.5'; }
+        elseif ($ratingValue <= 3.0) { $starValue = '3'; }
+        elseif ($ratingValue <= 3.5) { $starValue = '3.5'; }
+        elseif ($ratingValue <= 4.0) { $starValue = '4'; }
+        elseif ($ratingValue <= 4.5) { $starValue = '4.5'; }
+        // Ensure that any rating greater than 4.5 (including 5.0) maps to '5'
+        elseif ($ratingValue > 4.5) { $starValue = '5'; }
+        // No else needed, as \$starValue is initialized and ratings above 5 are capped at 5.
+
+        $ratingData = new \stdClass();
+        $ratingData->starValue = $starValue;       // e.g., "3.5"
+        $ratingData->originalValue = $ratingValue; // e.g., 3.78
+        $ratingData->totalStars = $totalStars;     // e.g., 5
+
+        // Example for template:
+        // $imageName = 'stars_' . str_replace('.', '_', $ratingData->starValue) . '.gif';
+        // $imageURL = Uri::root(true) . '/media/com_tienda/images/ratings/' . $imageName;
+        // <img src="{$imageURL}" alt="{$ratingData->originalValue} / {$ratingData->totalStars}" />
+
+        Factory::getApplication()->enqueueMessage('ProductHelper::getRatingImage now returns data. Template needs to render stars using starValue (e.g., ' . $ratingData->starValue . ').', 'notice');
+
+        return $ratingData;
     }
 
     /**

@@ -11,6 +11,7 @@ use Joomla\CMS\Table\Table;
 use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\MVC\Factory\MVCFactoryInterface;
 use Joomla\Event\DispatcherInterface;
+use Joomla\CMS\Utilities\ArrayHelper;
 
 // Assuming the new base controller is Dioscouri\Component\Tienda\Administrator\Controller\Controller
 class ProductsController extends Controller
@@ -1743,4 +1744,99 @@ class ProductsController extends Controller
 
     // Placeholder for other methods - the subtask should attempt to convert them based on the above guidance.
     // It is understood that many will be heavily commented out initially.
+
+    public function publish()
+    {
+        $app    = Factory::getApplication();
+        $cid    = $this->input->get('cid', [], 'array');
+        // $data   = ['publish' => 1]; // Data for model method - not directly used in this J5 model->publish signature
+
+        if (empty($cid)) {
+            $app->enqueueMessage(Text::_('JNO_ITEM_SELECTED'), 'warning');
+            $this->setRedirect(Route::_('index.php?option=com_tienda&view=products', false)); // Redirect on error too
+            return false;
+        }
+
+        ArrayHelper::toInteger($cid);
+        $model = $this->getModel('Products'); // Assuming list model can handle this
+        try {
+            // The model's publish method directly uses the state (true for publish)
+            if (!$model->publish($cid, true)) {
+                // If model->publish returns false, it should have set errors in the model.
+                foreach ($model->getErrors() as $error) {
+                    $app->enqueueMessage($error, 'error');
+                }
+                $success = false;
+            } else {
+                $app->enqueueMessage(Text::plural('COM_TIENDA_N_ITEMS_PUBLISHED', count($cid)));
+                $success = true;
+            }
+        } catch (\Exception $e) {
+            $app->enqueueMessage($e->getMessage(), 'error');
+            $success = false;
+        }
+        $this->setRedirect(Route::_('index.php?option=com_tienda&view=products', false));
+        return $success; // Return success status
+    }
+
+    public function unpublish()
+    {
+        $app    = Factory::getApplication();
+        $cid    = $this->input->get('cid', [], 'array');
+        // $data   = ['publish' => 0]; // Data for model method - not directly used
+
+        if (empty($cid)) {
+            $app->enqueueMessage(Text::_('JNO_ITEM_SELECTED'), 'warning');
+            $this->setRedirect(Route::_('index.php?option=com_tienda&view=products', false)); // Redirect on error too
+            return false;
+        }
+
+        ArrayHelper::toInteger($cid);
+        $model = $this->getModel('Products');
+        try {
+            if (!$model->publish($cid, false)) { // false for unpublish
+                 foreach ($model->getErrors() as $error) {
+                    $app->enqueueMessage($error, 'error');
+                }
+                $success = false;
+            } else {
+                $app->enqueueMessage(Text::plural('COM_TIENDA_N_ITEMS_UNPUBLISHED', count($cid)));
+                $success = true;
+            }
+        } catch (\Exception $e) {
+            $app->enqueueMessage($e->getMessage(), 'error');
+            $success = false;
+        }
+        $this->setRedirect(Route::_('index.php?option=com_tienda&view=products', false));
+        return $success; // Return success status
+    }
+
+    public function delete($key = null, $urlVar = null)
+    {
+        $app    = Factory::getApplication();
+        $cid    = $this->input->get('cid', [], 'array');
+
+        if (empty($cid)) {
+            $app->enqueueMessage(Text::_('JNO_ITEM_SELECTED'), 'warning');
+            $this->setRedirect(Route::_('index.php?option=com_tienda&view=products', false));
+            return false;
+        }
+
+        ArrayHelper::toInteger($cid);
+        $model = $this->getModel('Products'); // Assuming list model can handle this
+        try {
+            if (!$model->delete($cid)) {
+                // If model->delete() returns false, get errors from model
+                foreach ($model->getErrors() as $error) {
+                    $app->enqueueMessage($error, 'error');
+                }
+            } else {
+                 $app->enqueueMessage(Text::plural('COM_TIENDA_N_ITEMS_DELETED', count($cid)));
+            }
+        } catch (\Exception $e) {
+            $app->enqueueMessage($e->getMessage(), 'error');
+        }
+        $this->setRedirect(Route::_('index.php?option=com_tienda&view=products', false));
+        // Note: Controller's delete usually doesn't return a boolean itself, redirection handles flow.
+    }
 }

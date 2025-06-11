@@ -72,9 +72,10 @@ class ProductTable extends Table
     public $subscription_prorated_charge = null;
     public $subscription_prorated_term = null;
 
-    public function __construct(&$db)
+    public function __construct(DatabaseDriver $db) // Updated type hint for J5
     {
         parent::__construct('#__tienda_products', 'product_id', $db);
+        $this->setColumnAlias('published', 'product_enabled');
     }
 
     public function check()

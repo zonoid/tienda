@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config>
+    <fieldset
+        name="general"
+        label="COM_TIENDA_GENERAL_SETTINGS"
+        description="COM_TIENDA_GENERAL_SETTINGS_DESC"
+    >
+        <field
+            name="default_currencyid"
+            type="sql"
+            default="1"
+            label="COM_TIENDA_DEFAULT_CURRENCY_LABEL"
+            description="COM_TIENDA_DEFAULT_CURRENCY_DESC"
+            query="SELECT currency_id AS value, currency_name AS default_currencyid FROM #__tienda_currencies WHERE enabled = '1' ORDER BY currency_name"
+            key_field="value"
+            value_field="default_currencyid"
+        />
+        <field
+            name="currency_exchange_autoupdate"
+            type="radio"
+            default="1"
+            label="COM_TIENDA_AUTO_UPDATE_EXCHANGE_RATES_LABEL"
+            description="COM_TIENDA_AUTO_UPDATE_EXCHANGE_RATES_DESC"
+            class="btn-group btn-group-yesno"
+            >
+            <option value="1">JYES</option>
+            <option value="0">JNO</option>
+        </field>
+        <field name="currency_symbol_pre" type="text" default="$" label="COM_TIENDA_CURRENCY_SYMBOL_PRE_LABEL" description="COM_TIENDA_CURRENCY_SYMBOL_PRE_DESC" />
+        <field name="currency_symbol_post" type="text" default="" label="COM_TIENDA_CURRENCY_SYMBOL_POST_LABEL" description="COM_TIENDA_CURRENCY_SYMBOL_POST_DESC" />
+        <field name="thousands_separator" type="text" default="," label="COM_TIENDA_THOUSANDS_SEPARATOR_LABEL" description="COM_TIENDA_THOUSANDS_SEPARATOR_DESC" />
+        <field name="decimal_separator" type="text" default="." label="COM_TIENDA_DECIMAL_SEPARATOR_LABEL" description="COM_TIENDA_DECIMAL_SEPARATOR_DESC" />
+        <field name="num_decimals" type="text" default="2" label="COM_TIENDA_NUMBER_OF_DECIMALS_LABEL" description="COM_TIENDA_NUMBER_OF_DECIMALS_DESC" />
+
+        <field
+            name="sha1_images"
+            type="radio"
+            default="0"
+            label="COM_TIENDA_USE_SHA1_IMAGE_PATHS_LABEL"
+            description="COM_TIENDA_USE_SHA1_IMAGE_PATHS_DESC"
+            class="btn-group btn-group-yesno"
+            >
+            <option value="1">JYES</option>
+            <option value="0">JNO</option>
+        </field>
+
+        <field
+            name="include_root_pathway"
+            type="radio"
+            default="0"
+            label="COM_TIENDA_INCLUDE_ROOT_CATEGORY_IN_PATHWAY_LABEL"
+            description="COM_TIENDA_INCLUDE_ROOT_CATEGORY_IN_PATHWAY_DESC"
+            class="btn-group btn-group-yesno"
+            >
+            <option value="1">JYES</option>
+            <option value="0">JNO</option>
+        </field>
+
+        <!-- Add other general settings from defines.php as needed -->
+
+    </fieldset>
+
+    <fieldset
+        name="display"
+        label="COM_TIENDA_DISPLAY_SETTINGS"
+        description="COM_TIENDA_DISPLAY_SETTINGS_DESC"
+    >
+        <!-- Add display-related settings from defines.php as needed -->
+        <field
+            name="display_product_cartbuttons"
+            type="radio"
+            default="1"
+            label="COM_TIENDA_DISPLAY_PRODUCT_PAGE_CART_BUTTONS_LABEL"
+            description="COM_TIENDA_DISPLAY_PRODUCT_PAGE_CART_BUTTONS_DESC"
+            class="btn-group btn-group-yesno"
+            >
+            <option value="1">JYES</option>
+            <option value="0">JNO</option>
+        </field>
+        <field
+            name="display_category_cartbuttons"
+            type="radio"
+            default="1"
+            label="COM_TIENDA_DISPLAY_CATEGORY_PAGE_CART_BUTTONS_LABEL"
+            description="COM_TIENDA_DISPLAY_CATEGORY_PAGE_CART_BUTTONS_DESC"
+            class="btn-group btn-group-yesno"
+            >
+            <option value="1">JYES</option>
+            <option value="0">JNO</option>
+        </field>
+
+    </fieldset>
+
+    <!-- Permissions Tab -->
+    <fieldset name="permissions" label="JCONFIG_PERMISSIONS_LABEL" description="JCONFIG_PERMISSIONS_DESC">
+        <field name="rules" type="rules" label="JCONFIG_PERMISSIONS_LABEL" class="inputbox" filter="rules" component="com_tienda" section="component" />
+    </fieldset>
+</config>

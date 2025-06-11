@@ -4,6 +4,7 @@ use Joomla\CMS\Router\Route;
 use Joomla\CMS\Layout\LayoutHelper;
 use Joomla\CMS\HTML\HTMLHelper;
 use Joomla\CMS\Language\Text;
+use Joomla\CMS\Uri\Uri;
 ?>
 
 <form action="<?php echo Route::_('index.php?option=com_tienda&view=products'); ?>" method="post" name="adminForm" id="adminForm" enctype="multipart/form-data">
@@ -71,34 +72,55 @@ use Joomla\CMS\Language\Text;
                     </a>
                 </td>
                 <td style="text-align: center; width: 50px;">
-                    <!-- TODO: Implement Product Image Display -->
-                    <!-- <?php // echo $helper_product->getImage($item->product_id, 'id', $item->product_name, 'full', false, false, array( 'width'=>48 ) ); ?> -->
-                    <small>[Image]</small>
+                    <?php echo \Dioscouri\Component\Tienda\Administrator\Helper\ProductHelper::getImage($item->product_id, 'id', $item->product_name, 'thumb', false, false, ['width'=>48, 'height'=>48]); ?>
                 </td>
                 <td style="text-align: left;">
                     <a href="<?php echo Route::_('index.php?option=com_tienda&task=product.edit&product_id=' . (int) $item->product_id); ?>">
                         <?php echo $this->escape($item->product_name); ?>
                     </a>
 
-                    <!-- TODO: Implement Product Rating Display -->
-                    <!-- <div class="product_rating"> -->
-                       <!-- <?php // echo $helper_product->getRatingImage( $item->product_rating, $this ); ?> -->
-                       <!-- <?php // if (!empty($item->product_comments)) : ?> -->
-                       <!-- <span class="product_comments_count">(<?php // echo $item->product_comments; ?>)</span> -->
-                       <!-- <?php // endif; ?> -->
-                    <!-- </div> -->
+                    <div class="product_rating">
+                        <?php $ratingData = \Dioscouri\Component\Tienda\Administrator\Helper\ProductHelper::getRatingImage($item->product_rating); ?>
+                        <?php if (isset($item->product_rating) && $item->product_rating > 0 && isset($ratingData->starValue)) : ?>
+                            <?php
+                            // Construct image name, e.g., stars_3_5.gif or stars_4_0.gif
+                            // Ensure that starValue like '3' becomes '3_0' for consistency if your images are named that way.
+                            // Or, if your images are just 'stars_3.gif', adjust accordingly.
+                            $starValueForImage = str_replace('.', '_', $ratingData->starValue);
+                            if (strpos($starValueForImage, '_') === false) { // If it's a whole number like '3', make it '3_0'
+                                $starValueForImage .= '_0';
+                            }
+                            $starImageFile = 'stars_' . $starValueForImage . '.gif'; // Assuming .gif as per original Tienda
+                            $ratingImageSrc = Uri::root(true) . '/media/com_tienda/images/ratings/' . $starImageFile;
+                            ?>
+                            <img src="<?php echo $ratingImageSrc; ?>" alt="<?php echo $this->escape(sprintf(Text::_('COM_TIENDA_RATING_TEXT'), $ratingData->originalValue, $ratingData->totalStars)); ?>" />
+                            <?php if (!empty($item->product_comments)) : ?>
+                                <span>(<?php echo (int)$item->product_comments; ?>)</span>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span><?php echo Text::_('COM_TIENDA_NO_RATING'); ?></span>
+                        <?php endif; ?>
+                    </div>
 
-                    <!-- TODO: Implement Product Categories Display with Popup Link -->
-                    <!-- <div class="product_categories"> -->
-                        <!-- <span style="float: right;">[<?php // echo TiendaUrl::popup( "index.php?option=com_tienda&controller=products&task=selectcategories&id=".$item->product_id."&tmpl=component", Text::_('COM_TIENDA_SELECT_CATEGORIES'), array('update' => true) ); ?>]</span> -->
-                        <!-- <?php // $categories = $helper_product->getCategories( $item->product_id ); ?> -->
-                        <!-- <?php // for ($n='0'; $n<count($categories) && $n<'1'; $n++) : ?> -->
-                            <!-- <?php // $category = $categories[$n]; ?> -->
-                            <!-- <?php // echo $helper_category->getPathName( $category ); ?> -->
-                            <!-- <br/> -->
-                        <!-- <?php // endfor; ?> -->
-                        <!-- <?php // if (count($categories) > $n) { echo sprintf( Text::_('COM_TIENDA_AND_X_MORE'), count($categories) - $n ); } ?> -->
-                    <!-- </div> -->
+                    <div class="product_categories">
+                        <?php
+                        $category_ids = \Dioscouri\Component\Tienda\Administrator\Helper\ProductHelper::getCategories($item->product_id);
+                        if (!empty($category_ids)) {
+                            $first_category_id = $category_ids[0];
+                            // TODO: CategoryTable needs to be refactored for getPathName to work reliably
+                            // For now, if CategoryHelper is not fully functional due to table dependencies, this might output notices or empty strings.
+                            $category_path = \Dioscouri\Component\Tienda\Administrator\Helper\CategoryHelper::getPathName($first_category_id);
+                            echo $this->escape($category_path);
+                             if (count($category_ids) > 1) {
+                                echo ' ' . Text::sprintf('COM_TIENDA_AND_X_MORE', count($category_ids) - 1);
+                            }
+                        } else {
+                            echo Text::_('COM_TIENDA_NO_CATEGORY_ASSIGNED');
+                        }
+                        ?>
+                        <!-- TODO: Implement Categories Popup Link if still needed -->
+                        <!-- <span style="float: right;">[...]</span> -->
+                    </div>
 
                     <!-- TODO: Implement Image Gallery Path Display -->
                     <!-- <div class="product_images_path"> -->
