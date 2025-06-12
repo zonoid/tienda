@@ -207,18 +207,63 @@ class ProductsModel extends ListModel
 
         $query->order($db->escape($orderCol) . ' ' . $db->escape($orderDirnFromState));
 
-        // TODO: Implement EAV filtering logic here based on active EAV states/filters.
-        // This would involve dynamically adding JOINs and WHERE clauses for each EAV filter.
-        // Example:
-        // $eavFilters = $this->getState('eav_filters_active'); // This state would need to be populated in populateState
-        // if (!empty($eavFilters)) {
-        //     foreach ($eavFilters as $eavAlias => $eavValue) {
-        //         // Add JOINs for $eavAlias attribute and its value table
-        //         // Add WHERE clause for $eavAlias.value = $eavValue
-        //     }
-        // }
-        // Removed the generic enqueueMessage about EAV as specific TODOs are more helpful.
-        // $app->enqueueMessage('getListQuery in ProductsModel needs full EAV implementation for joins, where, and ordering.', 'notice');
+        // Example EAV Filtering (simplified - assumes EAV aliases match filter names like 'eav_color')
+        $eavFilters = [
+            'eav_color' => $this->getState('filter.eav_color'),
+            'eav_material' => $this->getState('filter.eav_material')
+        ];
+
+        $joinIndex = 0;
+        foreach ($eavFilters as $filterKey => $filterValue) {
+            if (!empty($filterValue)) {
+                $eavAlias = str_replace('eav_', '', $filterKey); // e.g., 'color' or 'material'
+
+                // Need to get attribute_id and type for this alias
+                // This is a simplified lookup. A robust solution might cache attribute details.
+                $attrQuery = $db->getQuery(true)
+                    ->select([$db->quoteName('eavattribute_id'), $db->quoteName('eavattribute_type')])
+                    ->from($db->quoteName('#__tienda_eavattributes'))
+                    ->where($db->quoteName('eavattribute_alias') . ' = ' . $db->quote($eavAlias))
+                    ->where($db->quoteName('eaventity_type') . ' = ' . $db->quote('products')); // Assuming 'products'
+                $db->setQuery($attrQuery, 0, 1);
+                $eavAttributeDetails = $db->loadObject();
+
+                if ($eavAttributeDetails) {
+                    $joinIndex++;
+                    $valTableAlias = 'eav_val_' . $joinIndex;
+                    $attrTableAlias = 'eav_attr_' . $joinIndex;
+                    // Construct value table name carefully. Ensure eavattribute_type is safe.
+                    $eavAttributeTypeClean = preg_replace('/[^a-zA-Z0-9_]/', '', strtolower($eavAttributeDetails->eavattribute_type));
+                    if (empty($eavAttributeTypeClean)) {
+                        // Skip if type is somehow empty or invalid after cleaning
+                        // Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_EAV_FILTER_ATTR_INVALID_TYPE', $eavAlias, $eavAttributeDetails->eavattribute_type), 'warning');
+                        continue;
+                    }
+                    $valueTable = '#__tienda_eavvalues' . $eavAttributeTypeClean;
+
+
+                    $query->join('INNER', $db->quoteName($valueTable) . ' AS ' . $db->quoteName($valTableAlias)
+                        . ' ON ' . $db->quoteName($valTableAlias . '.eaventity_id') . ' = tbl.product_id');
+                    $query->join('INNER', $db->quoteName('#__tienda_eavattributes') . ' AS ' . $db->quoteName($attrTableAlias)
+                        . ' ON ' . $db->quoteName($valTableAlias . '.eavattribute_id') . ' = ' . $db->quoteName($attrTableAlias . '.eavattribute_id'));
+
+                    $query->where($db->quoteName($attrTableAlias . '.eavattribute_alias') . ' = ' . $db->quote($eavAlias));
+
+                    // For list types, use exact match. For text types, use LIKE.
+                    if (in_array(strtolower($eavAttributeDetails->eavattribute_type), ['list', 'select', 'radio', 'boolean', 'bool'])) {
+                         $query->where($db->quoteName($valTableAlias . '.eavvalue_value') . ' = ' . $db->quote($filterValue));
+                    } else {
+                         $query->where($db->quoteName($valTableAlias . '.eavvalue_value') . ' LIKE ' . $db->quote('%' . $db->escape($filterValue, true) . '%', false));
+                    }
+                } else {
+                    // Enqueue message using Text::_ for translation
+                    Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_EAV_FILTER_ATTR_NOT_FOUND', $eavAlias), 'warning');
+                }
+            }
+        }
+        // Ensure GROUP BY is still valid after potential new JOINs. If EAV values cause multiple rows per product,
+        // this might need adjustment, or the main GROUP BY tbl.product_id should be sufficient if other selects are aggregates or functionally dependent.
+        // The current GROUP BY on tbl.product_id should be okay.
 
         return $query;
     }
@@ -284,13 +329,24 @@ class ProductsModel extends ListModel
         // $this->setState('filter.quantity_to', $input->getInt('quantity_to', $app->getUserState('com_tienda.products.filter.quantity_to', null)));
         // $app->setUserState('com_tienda.products.filter.quantity_to', $this->getState('filter.quantity_to'));
 
+        // EAV Filters from filter_products.xml
+        // Example for eav_color
+        $eavColorValue = $input->getString('filter_eav_color', $app->getUserState('com_tienda.products.filter.eav_color', ''));
+        $this->setState('filter.eav_color', $eavColorValue);
+        $app->setUserState('com_tienda.products.filter.eav_color', $eavColorValue);
+
+        // Example for eav_material
+        $eavMaterialValue = $input->getString('filter_eav_material', $app->getUserState('com_tienda.products.filter.eav_material', ''));
+        $this->setState('filter.eav_material', $eavMaterialValue);
+        $app->setUserState('com_tienda.products.filter.eav_material', $eavMaterialValue);
+
         // TODO: Port EAV filters from TiendaModelEav and store them in state.
         // Example: $eavValue = $input->getString('eav_someattribute', $app->getUserState('com_tienda.products.filter.eav_someattribute', ''));
         // $this->setState('filter.eav_someattribute', $eavValue);
         // $app->setUserState('com_tienda.products.filter.eav_someattribute', $eavValue);
-        if ($this->getState('filter.eav_someattribute')) { // Example check
-             Factory::getApplication()->enqueueMessage('populateState in ProductsModel needs EAV filter states to be added.', 'notice');
-        }
+        // if ($this->getState('filter.eav_someattribute')) { // Example check
+        // Factory::getApplication()->enqueueMessage('populateState in ProductsModel needs EAV filter states to be added.', 'notice');
+        // }
     }
 
     /**
@@ -483,8 +539,19 @@ class ProductsModel extends ListModel
                     $success = false;
                 }
 
-                // TODO: Implement cascading delete for complex related data (attributes & options, comments, files on disk, relations, etc.)
-                // Basic xrefs, prices, and quantities are now handled.
+                // Delete EAV Values for this product
+                try {
+                    // Assuming 'products' is the eaventity_type for products.
+                    // EavHelper::deleteEavValuesFromEntity was already refactored to use new tables.
+                    EavHelper::deleteEavValuesFromEntity('products', (int)$pk);
+                    // Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_DEBUG_DELETED_EAV_FOR_PRODUCT', $pk), 'message'); // Optional debug
+                } catch (\Exception $e) {
+                    $this->setError(Text::sprintf('COM_TIENDA_ERROR_DELETING_EAV_VALUES', $pk) . ': ' . $e->getMessage());
+                    $success = false; // Mark as not fully successful
+                }
+
+                // TODO: Implement cascading delete for other complex related data (e.g., files on disk, relations, product comments if not handled by their own FK constraints).
+                // Basic xrefs, prices, quantities and EAV values are now handled.
 
                 if (!$table->delete($pk)) {
                     $this->setError($table->getError());

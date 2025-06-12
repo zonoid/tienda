@@ -1,40 +1,111 @@
 <?xml version="1.0" encoding="utf-8"?>
-<extension type="module" version="1.0" client="site" method="upgrade">
-    <name>Tienda</name>
-    <author>My Company</author>
-    <creationDate>August 2023</creationDate>
-    <copyright>Copyright (C) 2023 My Company. All rights reserved.</copyright>
-    <license>http://www.gnu.org/licenses/gpl-2.0.html GNU/GPL</license>
-    <authorEmail>support@mycompany.com</authorEmail>
-    <authorUrl>www.mycompany.com</authorUrl>
+<extension type="component" version="3.1" method="upgrade">
+    <name>COM_TIENDA</name>
+    <author>Dioscouri Design</author>
+    <creationDate>January 2024</creationDate>
+    <copyright>(C) 2024 Dioscouri Design. All rights reserved.</copyright>
+    <license>GNU/GPL V2 or later</license>
+    <authorEmail>support@dioscouri.com</authorEmail>
+    <authorUrl>www.dioscouri.com</authorUrl>
     <version>1.0.0</version>
-    <description>Tienda Description</description>
-    <files>
-        <filename module="mod_tienda">mod_tienda.php</filename>
-        <filename>index.html</filename>
-        <filename>helper.php</filename>
-        <filename>LICENSE.txt</filename>
-        <folder>tmpl</folder>
-        <folder>lang</folder>
+    <description>COM_TIENDA_DESCRIPTION</description>
+    <scriptfile>script.php</scriptfile>
+
+    <install>
+        <sql>
+            <file driver="mysql" charset="utf8">install.mysql.utf8.sql</file>
+        </sql>
+    </install>
+    <uninstall>
+        <sql>
+            <file driver="mysql" charset="utf8">uninstall.mysql.utf8.sql</file>
+        </sql>
+    </uninstall>
+    <update>
+        <schemas>
+            <schemapath type="mysql">sql</schemapath>
+        </schemas>
+    </update>
+
+    <files folder="site">
+        <folder>controllers</folder>
         <folder>css</folder>
-        <folder>js</folder>
+        <folder>elements</folder>
+        <folder>helpers</folder>
         <folder>images</folder>
+        <folder>js</folder>
+        <folder>lib</folder>
+        <folder>models</folder>
+        <folder>tmpl</folder>
+        <folder>views</folder>
+        <filename>defines.php</filename>
+        <filename>index.html</filename>
+        <filename>router.php</filename>
+        <filename>tienda.php</filename>
     </files>
-    <languages folder="lang">
-        <language tag="en-GB">en-GB/en-GB.mod_tienda.ini</language>
-        <language tag="en-GB">en-GB/en-GB.mod_tienda.sys.ini</language>
-    </languages>
+
+    <media folder="media" destination="com_tienda">
+        <folder>css</folder>
+        <folder>images</folder>
+        <folder>js</folder>
+        <filename>index.html</filename>
+    </media>
+
+    <administration>
+        <menu img="media/com_tienda/images/logo-16.png" link="index.php?option=com_tienda">COM_TIENDA_MENU</menu>
+        <submenu>
+            <!--
+            TODO: Add Submenu items here using new AdminMenuHelper
+            <menuitem act="" alt="Tienda" controller="dashboard" img="class:postassistant" task="view" view="">COM_TIENDA_SUBMENU_DASHBOARD</menuitem>
+            -->
+        </submenu>
+        <files folder="admin">
+            <folder>controllers</folder>
+            <folder>css</folder>
+            <folder>elements</folder>
+            <folder>forms</folder>
+            <folder>helpers</folder>
+            <folder>images</folder>
+            <folder>js</folder>
+            <folder>language</folder>
+            <folder>lib</folder>
+            <folder>models</folder>
+            <folder>sql</folder>
+            <folder>src</folder>
+            <folder>tables</folder>
+            <folder>tmpl</folder>
+            <folder>views</folder>
+            <filename>access.xml</filename>
+            <filename>config.xml</filename>
+            <filename>defines.php</filename>
+            <filename>index.html</filename>
+            <filename>install.mysql.utf8.sql</filename>
+            <filename>script.php</filename>
+            <filename>tienda.php</filename>
+            <filename>uninstall.mysql.utf8.sql</filename>
+        </files>
+        <languages folder="admin/language">
+            <language tag="en-GB">en-GB/en-GB.com_tienda.ini</language>
+            <language tag="en-GB">en-GB/en-GB.com_tienda.sys.ini</language>
+        </languages>
+    </administration>
+
     <config>
         <fields name="params">
-            <fieldset name="basic">
-                <field name="display_login_form" type="radio" default="1" label="Display Login Form" description="Display Login Form Desc">
-                    <option value="0">No</option>
-                    <option value="1">Yes</option>
-                </field>
-                <field name="display_logout_form" type="radio" default="1" label="Display Logout Form" description="Display Logout Form Desc">
-                    <option value="0">No</option>
-                    <option value="1">Yes</option>
-                </field>
+            <fieldset name="COM_TIENDA_CONFIG_BASIC_OPTIONS_LABEL" label="COM_TIENDA_CONFIG_BASIC_OPTIONS_LABEL"
+                      description="COM_TIENDA_CONFIG_BASIC_OPTIONS_DESC">
+                <field name="initial_order_state" type="text" default="17"
+                       label="COM_TIENDA_CONFIG_INITIAL_ORDER_STATE_LABEL"
+                       description="COM_TIENDA_CONFIG_INITIAL_ORDER_STATE_DESC" />
+                <field name="shop_name" type="text" default=""
+                       label="COM_TIENDA_CONFIG_SHOP_NAME_LABEL"
+                       description="COM_TIENDA_CONFIG_SHOP_NAME_DESC" />
+                <field name="shop_owner_name" type="text" default=""
+                       label="COM_TIENDA_CONFIG_SHOP_OWNER_NAME_LABEL"
+                       description="COM_TIENDA_CONFIG_SHOP_OWNER_NAME_DESC" />
+                <field name="shop_email" type="text" default=""
+                       label="COM_TIENDA_CONFIG_SHOP_EMAIL_LABEL"
+                       description="COM_TIENDA_CONFIG_SHOP_EMAIL_DESC" />
             </fieldset>
         </fields>
     </config>

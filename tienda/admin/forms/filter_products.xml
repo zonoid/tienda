@@ -84,6 +84,28 @@
             <option value="">JOPTION_SELECT_TAX_CLASS</option>
         </field>
 
+        <field
+            name="eav_color"
+            type="list"
+            label="COM_TIENDA_FILTER_COLOR_LABEL"
+            description="COM_TIENDA_FILTER_COLOR_DESC"
+            onchange="this.form.submit();"
+            >
+            <option value="">COM_TIENDA_SELECT_COLOR</option>
+            <!-- TODO: Options should be populated dynamically if possible, or at least be common values -->
+            <option value="red">Red</option>
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+        </field>
+
+        <field
+            name="eav_material"
+            type="text"
+            label="COM_TIENDA_FILTER_MATERIAL_LABEL"
+            description="COM_TIENDA_FILTER_MATERIAL_DESC"
+            hint="COM_TIENDA_FILTER_MATERIAL_HINT"
+        />
+
         <!-- Add placeholders for other potential filters like SKU, price range, quantity range -->
         <!-- These might need custom field types or more complex SQL if they are not direct lookups -->
 
