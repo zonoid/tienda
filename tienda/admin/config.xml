@@ -89,6 +89,9 @@
             <option value="0">JNO</option>
         </field>
 
+        <field name="gallery_thumb_width" type="number" default="150" label="COM_TIENDA_GALLERY_THUMB_WIDTH_LABEL" description="COM_TIENDA_GALLERY_THUMB_WIDTH_DESC" step="10" min="50" />
+        <field name="gallery_thumb_height" type="number" default="150" label="COM_TIENDA_GALLERY_THUMB_HEIGHT_LABEL" description="COM_TIENDA_GALLERY_THUMB_HEIGHT_DESC" step="10" min="50" />
+
     </fieldset>
 
     <!-- Permissions Tab -->

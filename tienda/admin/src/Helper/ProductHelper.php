@@ -19,16 +19,16 @@ use Joomla\CMS\HTML\HTMLHelper;
 use Joomla\CMS\Uri\Uri;
 use Joomla\CMS\Filesystem\File;
 use Joomla\CMS\Filesystem\Folder;
+use Joomla\CMS\Filesystem\Path; // Added for Path::clean
 use Joomla\Event\Dispatcher; // Assuming it might be needed for future event handling
 // use Joomla\Event\DispatcherInterface; // More specific for type hinting if injected
+use Joomla\CMS\Image\Image;
 
 class ProductHelper
 {
     private static array $loadedProducts = [];
     private static array $categoriesXref = [];
     // Add other static caches here if identified as needed from old helper, e.g., for layouts, gallery paths etc.
-    // private static array $galleryPaths = [];
-    // private static array $galleryUrls = [];
     // private static array $filePaths = [];
     // private static array $productPrices = [];
 
@@ -188,25 +188,105 @@ class ProductHelper
         return null;
     }
 
-    public static function getGalleryImages($folder = null, $options = [], $triggerEvent = true) {
-        Factory::getApplication()->enqueueMessage('ProductHelper::getGalleryImages needs refactoring with J5 Filesystem API.', 'notice');
-        return [];
-    }
-
-    public static function getGalleryPath($row) {
-        Factory::getApplication()->enqueueMessage('ProductHelper::getGalleryPath needs refactoring using ProductTable::getImagePath or similar.', 'notice');
-        // Simplified placeholder - actual logic was more complex
-        if (is_object($row) && isset($row->product_id)) {
-             return JPATH_SITE . '/media/com_tienda/images/products/' . $row->product_id;
-        } elseif (is_numeric($row)) {
-             return JPATH_SITE . '/media/com_tienda/images/products/' . $row;
+    public static function getGalleryImages($folderPath = null, array $options = [], $triggerEvent = true)
+    {
+        $images = [];
+        if (empty($folderPath) || !Folder::exists($folderPath)) {
+            Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_GALLERY_FOLDER_NOT_FOUND', $folderPath ?? 'N/A'), 'warning');
+            return $images;
         }
-        return JPATH_SITE . '/media/com_tienda/images/products/unknown';
+
+        $filter = '.'; // Default filter for JFolder::files (current directory)
+        $recurse = false;
+        $fullpath = true; // Get full paths for files
+        $exclude = ['.svn', 'CVS', '.DS_Store', '__MACOSX', 'index.html']; // Standard exclusions
+
+        // Extract options
+        if (isset($options['filter'])) {
+            $filter = $options['filter'];
+        }
+        if (isset($options['recurse'])) {
+            $recurse = (bool) $options['recurse'];
+        }
+        if (isset($options['fullpath'])) {
+            $fullpath = (bool) $options['fullpath'];
+        }
+        if (isset($options['exclude']) && is_array($options['exclude'])) {
+            $exclude = array_merge($exclude, $options['exclude']);
+        }
+
+        $files = Folder::files($folderPath, $filter, $recurse, $fullpath, $exclude);
+
+        if (!empty($files)) {
+            foreach ($files as $file) {
+                // Basic check for image file extensions
+                $imgExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+                $fileExtension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+                if (in_array($fileExtension, $imgExtensions)) {
+                    $images[] = $fullpath ? $file : basename($file);
+                }
+            }
+        }
+
+        if ($triggerEvent) {
+            // TODO: Implement J5 event dispatching for onPrepareGalleryImages.
+            // $dispatcher = Factory::getApplication()->getDispatcher();
+            // $args = ['images' => &$images, 'path' => $folderPath, 'options' => $options];
+            // $dispatcher->trigger('onPrepareGalleryImages', $args);
+            Factory::getApplication()->enqueueMessage('ProductHelper::getGalleryImages event trigger onPrepareGalleryImages needs J5 implementation.', 'notice');
+        }
+
+        return $images;
     }
 
-    public static function getGalleryUrl($id) {
-        Factory::getApplication()->enqueueMessage('ProductHelper::getGalleryUrl needs refactoring using ProductTable::getImageUrl or similar.', 'notice');
-        return Uri::root() . 'media/com_tienda/images/products/' . (int)$id . '/';
+    public static function getGalleryPath($productOrId)
+    {
+        $product = null;
+        if (is_object($productOrId) && $productOrId instanceof \Dioscouri\Component\Tienda\Administrator\Table\ProductTable) {
+            $product = $productOrId;
+        } elseif (is_numeric($productOrId)) {
+            $product = self::load((int)$productOrId, false, false); // Load without EAV, don't reset cache if already loaded
+        }
+
+        if ($product) {
+            // Assuming ProductTable::getImagePath(true) returns the gallery sub-path or full path
+            // The 'true' parameter in old TiendaTableProducts::getImagePath($product_id, $create=true) meant create folder.
+            // New ProductTable::getImagePath($gallery=false) - if $gallery is true, it appends 'gallery'.
+            // This needs to align with ProductTable::getImagePath's signature and intent.
+            // For now, let's assume $product->getImagePath(true) is intended to get the gallery-specific path.
+            $galleryPath = $product->getImagePath(true); // Pass true to indicate gallery path
+            if (!empty($galleryPath)) {
+                 return $galleryPath;
+            }
+             Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_PRODUCT_GALLERY_PATH_EMPTY', $product->product_id ?? 'N/A'), 'notice');
+        } else {
+            Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_PRODUCT_NOT_LOADED_FOR_GALLERY_PATH', is_object($productOrId) ? 'Object' : $productOrId), 'warning');
+        }
+        // Fallback or error path
+        return JPATH_SITE . '/media/com_tienda/products/unknown_gallery'; // Adjust as needed
+    }
+
+    public static function getGalleryUrl($productOrId)
+    {
+        $product = null;
+        if (is_object($productOrId) && $productOrId instanceof \Dioscouri\Component\Tienda\Administrator\Table\ProductTable) {
+            $product = $productOrId;
+        } elseif (is_numeric($productOrId)) {
+            $product = self::load((int)$productOrId, false, false);
+        }
+
+        if ($product) {
+            // Assuming ProductTable::getImageUrl(true) for gallery specific URL
+            $galleryUrl = $product->getImageUrl(true); // Pass true for gallery URL
+            if(!empty($galleryUrl)) {
+                return $galleryUrl;
+            }
+            Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_PRODUCT_GALLERY_URL_EMPTY', $product->product_id ?? 'N/A'), 'notice');
+        } else {
+             Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_PRODUCT_NOT_LOADED_FOR_GALLERY_URL', is_object($productOrId) ? 'Object' : $productOrId), 'warning');
+        }
+        // Fallback or error URL
+        return Uri::root(true) . '/media/com_tienda/products/unknown_gallery/'; // Adjust as needed
     }
 
     public static function getFilePath($id) {
@@ -421,5 +501,132 @@ class ProductHelper
     public static function getProductSKU($product, $attributes_array = []) {
         Factory::getApplication()->enqueueMessage('ProductHelper::getProductSKU needs refactoring (SKU generation based on attributes).', 'notice');
         return $product->product_sku ?? '';
+    }
+
+    public static function createThumbnail($sourceImagePath, $thumbTargetPath, $thumbWidth, $thumbHeight, $quality = 80)
+    {
+        if (!File::exists($sourceImagePath)) {
+            return false;
+        }
+        // Ensure target directory exists
+        $thumbDir = dirname($thumbTargetPath);
+        if (!Folder::exists($thumbDir)) {
+            if (!Folder::create($thumbDir)) {
+                Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_CREATING_THUMB_DIR', $thumbDir), 'error');
+                return false;
+            }
+        }
+
+        try {
+            $image = new Image($sourceImagePath); // Throws exception if file is not a supported image
+            // Get image info
+            $width  = $image->getWidth();
+            $height = $image->getHeight();
+
+            if (!$width || !$height) {
+                 Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_READING_IMAGE_DIMENSIONS', $sourceImagePath), 'error');
+                 return false;
+            }
+
+            // Calculate new dimensions
+            // Prevent division by zero if original image dimensions are zero for some reason
+            if ($width == 0 || $height == 0) {
+                Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_CALCULATING_THUMB_DIMENSIONS_ZERO_SRC', $sourceImagePath), 'error');
+                return false;
+            }
+
+            // Prevent division by zero if thumb target dimensions are zero
+            if ($thumbWidth == 0 && $thumbHeight == 0) {
+                 // If both are zero, maybe we keep original or use a default minimum, for now, error out.
+                 Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_CALCULATING_THUMB_DIMENSIONS_ZERO_TARGET', $sourceImagePath), 'error');
+                 return false;
+            } elseif ($thumbWidth == 0) { // Auto width based on height
+                $scale = $thumbHeight / $height;
+            } elseif ($thumbHeight == 0) { // Auto height based on width
+                $scale = $thumbWidth / $width;
+            } else { // Scale to fit within thumbWidth and thumbHeight (SCALE_INSIDE behavior)
+                 $scale = min($thumbWidth / $width, $thumbHeight / $height);
+            }
+
+            $newWidth  = floor($scale * $width);
+            $newHeight = floor($scale * $height);
+
+            if ($newWidth == 0 || $newHeight == 0) { // Avoid zero dimensions for the new image
+                 Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_CALCULATING_THUMB_DIMENSIONS', $sourceImagePath), 'error');
+                 return false;
+            }
+
+            // Resize method itself can throw exceptions
+            $resizedImage = $image->resize($newWidth, $newHeight, true, Image::SCALE_INSIDE); // true for keep aspect ratio
+            // toFile can also throw exceptions
+            $resizedImage->toFile($thumbTargetPath, $resizedImage->getType(), ['quality' => (int)$quality]);
+
+        } catch (\Exception $e) {
+            Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_THUMBNAIL_CREATION_ERROR', $sourceImagePath, $e->getMessage()), 'error');
+            return false;
+        }
+        return true;
+    }
+
+    public static function deleteGalleryImage($productId, $filename)
+    {
+        $app = Factory::getApplication();
+        $productId = (int)$productId;
+        $filename  = File::makeSafe($filename); // Sanitize filename
+
+        if (!$productId || empty($filename)) {
+            $app->enqueueMessage(Text::_('COM_TIENDA_ERROR_MISSING_PRODUCT_OR_FILENAME_FOR_DELETE'), 'error');
+            return false;
+        }
+
+        $galleryPath = self::getGalleryPath($productId); // Uses the refactored getGalleryPath
+        if (empty($galleryPath) || !Folder::exists($galleryPath)) {
+            $app->enqueueMessage(Text::sprintf('COM_TIENDA_GALLERY_PATH_NOT_FOUND_FOR_DELETE', $productId), 'error');
+            return false;
+        }
+
+        $filePath = Path::clean($galleryPath . DIRECTORY_SEPARATOR . $filename);
+        $thumbPath = Path::clean($galleryPath . DIRECTORY_SEPARATOR . 'thumbs' . DIRECTORY_SEPARATOR . $filename);
+        $success = true;
+
+        if (File::exists($filePath)) {
+            if (!File::delete($filePath)) {
+                $app->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_DELETING_PHYSICAL_GALLERY_IMAGE', $filename, $filePath), 'error');
+                $success = false;
+            }
+        } else {
+            $app->enqueueMessage(Text::sprintf('COM_TIENDA_PHYSICAL_GALLERY_IMAGE_NOT_FOUND', $filename, $filePath), 'notice');
+            // Still proceed to delete thumb if main image not found, and attempt DB record update
+        }
+
+        if (File::exists($thumbPath)) {
+            if (!File::delete($thumbPath)) {
+                $app->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_DELETING_PHYSICAL_GALLERY_THUMB', $filename, $thumbPath), 'error');
+                $success = false; // Potentially allow overall success if only thumb fails but main image deleted
+            }
+        }
+
+        // If this image was the main product_full_image or product_thumb_image, clear it
+        // Note: product_thumb_image is not standard in ProductTable, but checking just in case it was customized or for future use.
+        $productTable = self::load($productId, false, false); // Load non-cached, without EAV
+        if ($productTable) {
+            $updated = false;
+            if (isset($productTable->product_full_image) && $productTable->product_full_image == $filename) {
+                $productTable->product_full_image = '';
+                $updated = true;
+            }
+            // Example for a potential thumb field - adapt if Tienda uses a specific fieldname for main thumb
+            // if (isset($productTable->product_thumb_image) && $productTable->product_thumb_image == $filename) {
+            //     $productTable->product_thumb_image = '';
+            //     $updated = true;
+            // }
+            if ($updated) {
+                if (!$productTable->store()) {
+                    $app->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_CLEARING_MAIN_IMAGE_REFERENCE', $filename, $productTable->getError()), 'error');
+                    $success = false;
+                }
+            }
+        }
+        return $success;
     }
 }

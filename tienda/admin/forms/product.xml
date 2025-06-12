@@ -8,8 +8,7 @@
             <option value="1">JPUBLISHED</option>
             <option value="0">JUNPUBLISHED</option>
         </field>
-        <field name="category_id" type="categoryedit" extension="com_tienda" label="COM_TIENDA_CATEGORY" description="COM_TIENDA_SELECT_PRODUCT_CATEGORY" required="true" />
-        <!-- TODO: Multiple categories might need a custom field type or different handling -->
+        <field name="category_ids" type="category" extension="com_tienda" label="COM_TIENDA_CATEGORIES_LABEL" multiple="true" required="true" size="8" description="COM_TIENDA_SELECT_PRODUCT_CATEGORIES_DESC" />
         <field name="manufacturer_id" type="sql" label="COM_TIENDA_MANUFACTURER" query="SELECT manufacturer_id AS value, manufacturer_name AS manufacturer_id FROM #__tienda_manufacturers ORDER BY manufacturer_name">
             <option value="">JOPTION_SELECT_MANUFACTURER</option>
         </field>
@@ -19,7 +18,13 @@
         <field name="product_description_short" type="textarea" label="COM_TIENDA_SHORT_DESCRIPTION" description="COM_TIENDA_SHORT_DESCRIPTION_DESC" rows="5" cols="40" />
         <field name="product_description" type="editor" buttons="true" hide="pagebreak,readmore" label="COM_TIENDA_FULL_DESCRIPTION" description="COM_TIENDA_FULL_DESCRIPTION_DESC" filter="safehtml" />
         <field name="product_full_image" type="media" directory="com_tienda/products" label="COM_TIENDA_MAIN_IMAGE_LABEL" description="COM_TIENDA_MAIN_IMAGE_DESC" />
-        <!-- TODO: Add product gallery management field -->
+        <field
+            name="productgallerydisplay"
+            type="ProductGallery"
+            label="COM_TIENDA_PRODUCT_GALLERY_LABEL"
+            description="COM_TIENDA_PRODUCT_GALLERY_DESC"
+            addfieldprefix="Dioscouri\Component\Tienda\Administrator\Field"
+        />
         <field name="product_images_path" type="text" label="COM_TIENDA_IMAGE_GALLERY_OVERRIDE_PATH_LABEL" description="COM_TIENDA_IMAGE_GALLERY_OVERRIDE_PATH_DESC" size="40" />
     </fieldset>
 

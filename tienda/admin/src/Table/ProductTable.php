@@ -19,6 +19,8 @@ use Joomla\CMS\Date\Date;
 use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\Table\Table;
 use Joomla\CMS\Uri\Uri; // Added for getImageUrl
+use Joomla\CMS\Filesystem\Folder;
+use Joomla\CMS\Filesystem\Path;
 
 class ProductTable extends Table
 {
@@ -97,47 +99,86 @@ class ProductTable extends Table
         return true;
     }
 
-    public function getImagePath($check = true)
+    public function getImagePath($gallery = false, $check = true)
     {
         $appParams = ComponentHelper::getParams('com_tienda');
         $sha1_images = $appParams->get('sha1_images', '0');
+        $baseDir = JPATH_MEDIA . '/com_tienda/products'; // Standard base directory
 
-        // TODO: Replace Tienda::getPath('products_images') with a robust path generation.
-        // For now, using a placeholder relative to JPATH_SITE. This needs a proper ImageManager or config.
-        $default_dir = JPATH_SITE . '/media/com_tienda/images/products'; // Example, adjust as per actual structure
+        $defaultPathing = true;
+        $finalPath = $baseDir; // Initialize with baseDir
 
-        $dir = $default_dir;
+        if (!empty($this->product_images_path)) {
+            $overridePath = $this->product_images_path;
+            // Normalize separators for checks
+            $normalizedOverridePath = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $overridePath);
 
-        // TODO: Refactor TiendaHelperBase::getInstance() and checkDirectory
-        // For now, assume checkDirectory is a static helper or part of this class if simple enough.
-        // This part is highly dependent on how directory creation/checking is handled in J5.
-        // Factory::getApplication()->enqueueMessage('getImagePath needs TiendaHelperBase/checkDirectory refactoring.', 'notice');
-
-        if (!empty($this->product_images_path) /* && self::checkDirectory($this->product_images_path, $check) */) {
-            // Assuming product_images_path is an absolute path or resolvable path
-            // $dir = $this->product_images_path;
-             Factory::getApplication()->enqueueMessage('getImagePath: product_images_path override logic needs review for path validation.', 'notice');
-        } else {
-            $subPath = '';
-            if ($sha1_images == '1' && !empty($this->product_sku)) {
-                $subPath = $this->getSha1Subfolders($this->product_sku) . $this->product_sku;
-            } elseif ($sha1_images == '1' && !empty($this->product_id)) {
-                 $subPath = $this->getSha1Subfolders($this->product_id) . $this->product_id;
-            } elseif (!empty($this->product_sku)) {
-                $subPath = $this->product_sku;
-            } elseif(!empty($this->product_id)) {
-                $subPath = (string) $this->product_id;
-            }
-
-            if (!empty($subPath)) {
-                $image_dir = $default_dir . DIRECTORY_SEPARATOR . $subPath;
-                // if (self::checkDirectory($image_dir, $check)) { $dir = $image_dir; }
-                // For now, we'll just construct it. Directory checking/creation should be robust.
-                $dir = $image_dir;
+            if (strpos($normalizedOverridePath, DIRECTORY_SEPARATOR . DIRECTORY_SEPARATOR) === 0) {
+                // Old Tienda style: //path/relative/to/site_root
+                $finalPath = Path::clean(JPATH_SITE . DIRECTORY_SEPARATOR . ltrim($normalizedOverridePath, DIRECTORY_SEPARATOR));
+                $defaultPathing = false;
+            } elseif (Path::isAbsolute($normalizedOverridePath)) {
+                // Absolute server path. Use it directly.
+                // For security, one might want to check if it's within JPATH_SITE or JPATH_MEDIA, but for now, trust it if set.
+                $finalPath = $normalizedOverridePath;
+                $defaultPathing = false;
+                 Factory::getApplication()->enqueueMessage('ProductTable::getImagePath: Using direct absolute path for product_images_path. Ensure this path is intended and secure.', 'notice');
+            } else {
+                // Relative path, assume it's relative to the $baseDir
+                $finalPath = Path::clean($baseDir . DIRECTORY_SEPARATOR . $normalizedOverridePath);
+                $defaultPathing = false; // Still an override, but relative to our media base
             }
         }
 
-        return $dir;
+        if ($defaultPathing) { // No override, or override was not an absolute/special path
+            // Construct path based on ID/SKU and SHA1 settings relative to $baseDir
+            $subPath = '';
+            if ($sha1_images == '1') {
+                $identifier = !empty($this->product_sku) ? $this->product_sku : (!empty($this->product_id) ? (string)$this->product_id : '');
+                if ($identifier) {
+                    $subPath = $this->getSha1Subfolders($identifier) . $identifier;
+                }
+            } else {
+                $identifier = !empty($this->product_sku) ? $this->product_sku : (!empty($this->product_id) ? (string)$this->product_id : '');
+                if ($identifier) {
+                    $subPath = $identifier;
+                }
+            }
+
+            if (!empty($subPath)) {
+                // If $defaultPathing is true, $finalPath is $baseDir. If false, $finalPath is already the resolved override.
+                // This logic needs to ensure subPath is appended correctly ONLY if we are doing default pathing.
+                // The structure was: if override, use override. Else, use default + subpath.
+                // Corrected logic: $finalPath is already set if override is used. Don't append subPath to it.
+                // Only append subPath if we are NOT using an override path.
+                // This was already handled by the $defaultPathing flag logic.
+                // The $finalPath will be $baseDir if $defaultPathing is true.
+                 $finalPath = $baseDir . DIRECTORY_SEPARATOR . $subPath; // This is correct for default pathing
+            } elseif (!empty($this->product_id)) {
+                $finalPath = $baseDir . DIRECTORY_SEPARATOR . (string)$this->product_id;
+            } else {
+                 $finalPath = $baseDir . DIRECTORY_SEPARATOR . 'unknown';
+            }
+        }
+        // If an override path was used ($defaultPathing = false), $finalPath is already set.
+        // If default pathing was used ($defaultPathing = true), $finalPath has been constructed based on ID/SKU.
+
+        if ($gallery) {
+            $finalPath .= DIRECTORY_SEPARATOR . 'gallery';
+        }
+
+        $finalPath = Path::clean($finalPath);
+
+        if ($check) {
+            if (!Folder::exists($finalPath)) {
+                if (!Folder::create($finalPath, 0755)) { // Changed from 0777 for security
+                    Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_COULD_NOT_CREATE_DIRECTORY', $finalPath), 'error');
+                    // Optionally return a default path or false if creation failed
+                    return Path::clean($baseDir . DIRECTORY_SEPARATOR . 'unknown' . ($gallery ? DIRECTORY_SEPARATOR . 'gallery' : ''));
+                }
+            }
+        }
+        return $finalPath;
     }
 
     protected function getSha1Subfolders($string, $separator = DIRECTORY_SEPARATOR)
@@ -154,40 +195,75 @@ class ProductTable extends Table
         return $subdirs;
     }
 
-    public function getImageUrl()
+    public function getImageUrl($gallery = false)
     {
         $appParams = ComponentHelper::getParams('com_tienda');
         $sha1_images = $appParams->get('sha1_images', '0');
+        $baseUrl = Uri::root(true) . 'media/com_tienda/products/'; // Base URL, Uri::root(true) is path from site root.
 
-        // TODO: Replace Tienda::getUrl('products_images')
-        $default_url = Uri::root() . 'media/com_tienda/images/products/'; // Example
+        $defaultPathing = true;
+        $finalUrl = $baseUrl; // Initialize
 
-        $url = $default_url;
+        if (!empty($this->product_images_path)) {
+            $overridePath = $this->product_images_path;
+            $normalizedOverridePath = str_replace(['/', '\\'], '/', $overridePath); // Normalize to fwd slashes for URL logic
 
-        // Factory::getApplication()->enqueueMessage('getImageUrl needs TiendaHelperBase/checkDirectory refactoring and robust URL generation.', 'notice');
-
-        if (!empty($this->product_images_path) /* && self::checkDirectory($this->product_images_path, false) */) {
-            // $url = str_replace(JPATH_SITE . DIRECTORY_SEPARATOR, Uri::root(), $this->product_images_path);
-            // $url = rtrim(str_replace(DIRECTORY_SEPARATOR, '/', $url), '/') . '/';
-            Factory::getApplication()->enqueueMessage('getImageUrl: product_images_path override logic needs review for path to URL conversion.', 'notice');
-
-        } else {
-            $subPathUrl = '';
-            if ($sha1_images == '1' && !empty($this->product_sku)) {
-                $subPathUrl = $this->getSha1Subfolders($this->product_sku, '/') . $this->product_sku;
-            } elseif ($sha1_images == '1' && !empty($this->product_id)) {
-                $subPathUrl = $this->getSha1Subfolders($this->product_id, '/') . $this->product_id;
-            } elseif (!empty($this->product_sku)) {
-                $subPathUrl = $this->product_sku;
-            } elseif(!empty($this->product_id)){
-                $subPathUrl = (string) $this->product_id;
-            }
-
-            if(!empty($subPathUrl)){
-                $url = $default_url . rtrim($subPathUrl, '/') . '/';
+            if (strpos($normalizedOverridePath, '//') === 0) {
+                // Old Tienda style: //path/relative/to/site_root
+                $finalUrl = Uri::root(true) . ltrim($normalizedOverridePath, '/');
+                $defaultPathing = false;
+            } elseif (Path::isAbsolute($overridePath)) { // Check original path for server absolute
+                // Absolute server path. Convert to URL if it's within JPATH_SITE.
+                if (strpos($overridePath, JPATH_SITE) === 0) {
+                    $relativeToServerRoot = str_replace(JPATH_SITE, '', $overridePath);
+                    $finalUrl = Uri::root(true) . ltrim(str_replace(DIRECTORY_SEPARATOR, '/', $relativeToServerRoot), '/');
+                    $defaultPathing = false;
+                } else {
+                    // Absolute path not within JPATH_SITE, cannot reliably form a URL. Fallback.
+                    Factory::getApplication()->enqueueMessage('ProductTable::getImageUrl: product_images_path is an absolute server path outside JPATH_SITE, cannot form URL. Using default.', 'warning');
+                    // $finalUrl remains $baseUrl (default)
+                }
+            } else {
+                // Relative path, assume it's relative to the $baseUrl
+                $finalUrl = rtrim($baseUrl, '/') . '/' . ltrim($normalizedOverridePath, '/');
+                $defaultPathing = false;
             }
         }
-        return $url;
+
+        if ($defaultPathing) {
+            // Construct URL based on ID/SKU and SHA1 settings, relative to $baseUrl
+            $subPathUrl = '';
+            if ($sha1_images == '1') {
+                $identifier = !empty($this->product_sku) ? $this->product_sku : (!empty($this->product_id) ? (string)$this->product_id : '');
+                if ($identifier) {
+                    $subPathUrl = $this->getSha1Subfolders($identifier, '/') . $identifier;
+                }
+            } else {
+                $identifier = !empty($this->product_sku) ? $this->product_sku : (!empty($this->product_id) ? (string)$this->product_id : '');
+                if ($identifier) {
+                    $subPathUrl = $identifier;
+                }
+            }
+
+            if (!empty($subPathUrl)) {
+                $finalUrl = $baseUrl . $subPathUrl;
+            } elseif (!empty($this->product_id)) {
+                 $finalUrl = $baseUrl . (string)$this->product_id;
+            } else {
+                 $finalUrl = $baseUrl . 'unknown';
+            }
+        }
+        // If an override path was used ($defaultPathing = false), $finalUrl is already set.
+        // If default pathing was used ($defaultPathing = true), $finalUrl has been constructed based on ID/SKU.
+
+        if ($gallery) {
+            $finalUrl .= '/gallery';
+        }
+
+        // Ensure no double slashes except for protocol and ensure trailing slash
+        $finalUrl = rtrim(str_replace('//', '/', str_replace(':/', '://', $finalUrl)), '/') . '/';
+
+        return $finalUrl;
     }
 
     public function updateOverallRating($save = false)

@@ -20,6 +20,12 @@ use Joomla\CMS\Component\ComponentHelper;
 use Dioscouri\Component\Tienda\Administrator\Table\ProductTable; // Correct path to ProductTable
 use Joomla\Registry\Registry; // For product_params in getItem
 use Dioscouri\Component\Tienda\Administrator\Helper\EavHelper;
+use Dioscouri\Component\Tienda\Administrator\Helper\ProductHelper;
+use Joomla\CMS\Filesystem\File;
+use Joomla\CMS\Filesystem\Folder;
+use Joomla\CMS\Filesystem\Path; // Path is used in the new block
+use Joomla\CMS\Utilities\ArrayHelper;
+use Dioscouri\Component\Tienda\Administrator\Table\ProductCategoryXrefTable;
 
 class ProductModel extends AdminModel
 {
@@ -232,6 +238,15 @@ class ProductModel extends AdminModel
         $item = parent::getItem($pk);
 
         if ($item && !empty($item->product_id)) {
+            // Load selected category IDs
+            $db = Factory::getDbo();
+            $query = $db->getQuery(true)
+                ->select($db->quoteName('category_id'))
+                ->from($db->quoteName('#__tienda_productcategoryxref'))
+                ->where($db->quoteName('product_id') . ' = ' . (int)$item->product_id);
+            $db->setQuery($query);
+            $item->category_ids = $db->loadColumn(); // Load as an array of category IDs
+
             // Load EAV attributes and other related data and attach to $item.
             if ($item && isset($item->product_id) && $item->product_id > 0) { // Ensure item is loaded and has an ID
                 $entityType = 'products'; // Assuming 'products' is the eaventity_type for products
@@ -391,9 +406,143 @@ class ProductModel extends AdminModel
             }
         }
 
-        // TODO: Save other related data (prices, quantities per attribute, multiple categories, gallery images).
+        // Process uploaded gallery images
+        $productId = $table->{$pkName}; // Already available as $entity_id
+        // $app = Factory::getApplication(); // Already available
+        $jform_request = $app->input->files->get('jform', [], 'array');
+        $galleryImages = isset($jform_request['gallery_images']) ? $jform_request['gallery_images'] : [];
+
+        if ($productId && !empty($galleryImages) && isset($galleryImages['name']) && is_array($galleryImages['name']) && !empty($galleryImages['name'][0])) {
+            $galleryPath = ProductHelper::getGalleryPath($productId); // This should use ProductTable now, via ProductHelper
+
+            // Ensure gallery folder exists (ProductHelper::getGalleryPath should ideally handle this based on ProductTable::getImagePath)
+            // However, ProductTable::getImagePath's $check=true creates the final product-specific folder, not necessarily the 'gallery' subfolder.
+            // So, we might need to ensure the 'gallery' subfolder itself exists.
+            // The ProductHelper::getGalleryPath was modified to use $product->getImagePath(true) where true indicates gallery.
+            // And ProductTable::getImagePath($gallery=true, $check=true) will create $baseDir/id/gallery if $check is true.
+            // So, $galleryPath should already be created if ProductHelper::getGalleryPath was called with intent to create.
+            // For safety, an explicit check/create here for $galleryPath and $galleryPath/thumbs might be redundant if helpers do it.
+            // Let's assume ProductHelper::getGalleryPath($productId) already ensures $galleryPath exists.
+
+            if (!Folder::exists($galleryPath)) {
+                if (!Folder::create($galleryPath)) {
+                    $app->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_CREATING_GALLERY_FOLDER', $galleryPath), 'error');
+                    // Decide if this is a fatal error for the gallery upload portion
+                }
+            }
+
+            if (Folder::exists($galleryPath)) { // Proceed only if gallery path exists or was created
+                $thumbsPath = Path::clean($galleryPath . DIRECTORY_SEPARATOR . 'thumbs');
+                if (!Folder::exists($thumbsPath)) {
+                    if (!Folder::create($thumbsPath)) {
+                         $app->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_CREATING_GALLERY_THUMBS_FOLDER', $thumbsPath), 'error');
+                         // Non-fatal for main image upload, but thumbnails will fail.
+                    }
+                }
+
+                $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+                $maxSize = 2 * 1024 * 1024; // 2MB
+
+                foreach ($galleryImages['name'] as $key => $name) {
+                    if (empty($name) || !isset($galleryImages['error'][$key]) || $galleryImages['error'][$key] !== UPLOAD_ERR_OK) {
+                        continue;
+                    }
+
+                    $tmp_name = $galleryImages['tmp_name'][$key];
+                    $filename = File::makeSafe($name);
+                    $extension = strtolower(File::getExt($filename));
+                    $filesize = $galleryImages['size'][$key];
+
+                    if (!in_array($extension, $allowedExtensions)) {
+                        $app->enqueueMessage(Text::sprintf('COM_TIENDA_UPLOAD_ERROR_INVALID_EXTENSION', $filename), 'warning');
+                        continue;
+                    }
+                    if ($filesize > $maxSize) {
+                        $app->enqueueMessage(Text::sprintf('COM_TIENDA_UPLOAD_ERROR_FILE_TOO_LARGE', $filename), 'warning');
+                        continue;
+                    }
+
+                    $targetPath = Path::clean($galleryPath . DIRECTORY_SEPARATOR . $filename);
+                    if (File::upload($tmp_name, $targetPath)) {
+                        $app->enqueueMessage(Text::sprintf('COM_TIENDA_FILE_UPLOAD_SUCCESS', $filename), 'message');
+
+                        // Create thumbnail
+                        $thumbPath = Path::clean($thumbsPath . DIRECTORY_SEPARATOR . $filename);
+                        // Get thumbnail dimensions from config (add these to config.xml later)
+                        $params = ComponentHelper::getParams('com_tienda');
+                        $thumbWidth = $params->get('gallery_thumb_width', 150); // Example default
+                        $thumbHeight = $params->get('gallery_thumb_height', 150); // Example default
+
+                        if (ProductHelper::createThumbnail($targetPath, $thumbPath, $thumbWidth, $thumbHeight)) {
+                            // $app->enqueueMessage(Text::sprintf('COM_TIENDA_THUMBNAIL_SUCCESS', $filename), 'message'); // Optional success message
+                        } else {
+                            // Error message is enqueued by createThumbnail itself
+                        }
+
+                        if (empty($table->product_full_image)) {
+                            $table->product_full_image = $filename; // Store filename relative to its specific product image folder
+                            if (!$table->store()) {
+                                $app->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_UPDATING_MAIN_IMAGE', $table->getError()), 'error');
+                            }
+                        }
+                    } else {
+                        $app->enqueueMessage(Text::sprintf('COM_TIENDA_FILE_UPLOAD_ERROR', $filename), 'error');
+                    }
+                }
+            }
+        }
+
+        // TODO: Save other related data (prices, quantities per attribute, multiple categories).
+        // Gallery images (basic upload) now handled.
+
+        // Save category relationships
+        if (isset($data['category_ids'])) {
+            $category_ids = (array) $data['category_ids']; // Ensure it's an array
+            ArrayHelper::toInteger($category_ids); // Sanitize
+
+            // $entity_id is already set from $table->{$pkName} earlier in this method.
+            $xrefTable = new ProductCategoryXrefTable(Factory::getDbo());
+
+            // 1. Delete existing xrefs for this product
+            try {
+                $deleteQuery = Factory::getDbo()->getQuery(true)
+                    ->delete($xrefTable->getTableName())
+                    ->where(Factory::getDbo()->quoteName('product_id') . ' = ' . (int)$entity_id);
+                Factory::getDbo()->setQuery($deleteQuery)->execute();
+            } catch (\Exception $e) {
+                $this->setError(Text::sprintf('COM_TIENDA_ERROR_DELETING_OLD_CATEGORY_XREFS', $entity_id) . ': ' . $e->getMessage());
+                // Decide if this should make the whole save fail. For now, it adds to _errors.
+            }
+
+            // 2. Insert new xrefs
+            if (empty($this->getErrors())) { // Proceed only if deletion didn't cause critical errors (optional check)
+                foreach ($category_ids as $category_id) {
+                    if ($category_id > 0) {
+                        $xrefData = ['product_id' => $entity_id, 'category_id' => $category_id];
+                        try {
+                            // Reset table before each insert attempt with new composite key
+                            $xrefTable->reset();
+                            if (!$xrefTable->bind($xrefData) || !$xrefTable->store()) {
+                                // JTable::store will attempt INSERT. If PK violation, it might fail silently or throw error depending on DB.
+                                // A more robust way for composite keys without AI is direct insert and catch exception,
+                                // or a specific saveXref method in the table that handles it.
+                                // Given JTable's store with composite keys can be tricky for insert, let's use direct insert:
+                                // Factory::getDbo()->insertObject($xrefTable->getTableName(), (object)$xrefData);
+                                // However, to use Table class benefits (like events if any), let's try bind/store.
+                                // JTable's store() uses INSERT IGNORE or REPLACE INTO based on table properties or db driver,
+                                // or simple INSERT. For composite keys, it might try to update if load() by keys succeeds.
+                                // Since we deleted all, it should always be an INSERT.
+                                $this->setError(Text::sprintf('COM_TIENDA_ERROR_SAVING_CATEGORY_XREF_BIND_STORE', $category_id, $entity_id) . ': ' . $xrefTable->getError());
+                            }
+                        } catch (\Exception $e) { // Catch potential DB exceptions if store doesn't and direct insert used.
+                            $this->setError(Text::sprintf('COM_TIENDA_ERROR_SAVING_CATEGORY_XREF', $category_id, $entity_id) . ': ' . $e->getMessage());
+                        }
+                    }
+                }
+            }
+        }
         // Factory::getApplication()->enqueueMessage('ProductModel::save() Related data saving (prices, attributes, etc.) is a TODO for product ' . \$table->{\$pkName}, 'notice');
 
-        return empty(\$this->_errors); // Return true if no errors (including EAV ones)
+        return empty(\$this->_errors); // Return true if no errors (including EAV and gallery ones)
     }
 }

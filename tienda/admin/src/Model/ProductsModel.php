@@ -20,6 +20,8 @@ use Joomla\Registry\Registry; // For product_parameters
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Table\Table; // Added
 use Joomla\Utilities\ArrayHelper; // Added
+use Joomla\CMS\Filesystem\File;
+use Dioscouri\Component\Tienda\Administrator\Table\ProductFileTable;
 
 class ProductsModel extends ListModel
 {
@@ -550,8 +552,46 @@ class ProductsModel extends ListModel
                     $success = false; // Mark as not fully successful
                 }
 
-                // TODO: Implement cascading delete for other complex related data (e.g., files on disk, relations, product comments if not handled by their own FK constraints).
-                // Basic xrefs, prices, quantities and EAV values are now handled.
+                // Delete Physical Product Files and their DB records including related logs/downloads
+                $dbHost = $this->getDbo(); // Renamed to avoid conflict with $db from the loop for product files query
+                $queryFiles = $dbHost->getQuery(true)
+                    ->select([$dbHost->quoteName('productfile_id'), $dbHost->quoteName('productfile_path')])
+                    ->from($dbHost->quoteName('#__tienda_productfiles'))
+                    ->where($dbHost->quoteName('product_id') . ' = ' . (int)$pk);
+                $dbHost->setQuery($queryFiles);
+                $productFileRecords = $dbHost->loadObjectList();
+
+                if (!empty($productFileRecords)) {
+                    $productFileTable = new ProductFileTable($dbHost);
+                    foreach ($productFileRecords as $fileRecord) {
+                        if ($productFileTable->load($fileRecord->productfile_id)) {
+                            if (!empty($productFileTable->absolute_productfile_path) && File::exists($productFileTable->absolute_productfile_path)) {
+                                if (File::delete($productFileTable->absolute_productfile_path)) {
+                                    Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_PHYSICAL_FILE_DELETE_SUCCESS', $productFileTable->absolute_productfile_path), 'message');
+                                } else {
+                                    Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_PHYSICAL_FILE_DELETE_ERROR', $productFileTable->absolute_productfile_path), 'error');
+                                    // $success = false; // Optionally make overall delete fail
+                                }
+                            } elseif (!empty($productFileTable->productfile_path) && empty($productFileTable->absolute_productfile_path)) {
+                                 Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_PHYSICAL_FILE_PATH_INVALID_OR_NOT_ABSOLUTE', $productFileTable->productfile_path), 'warning');
+                            } else if (!empty($productFileTable->productfile_path)) {
+                                // Path was set, but file didn't exist at absolute_productfile_path
+                                // Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_PHYSICAL_FILE_NOT_FOUND', $productFileTable->absolute_productfile_path), 'notice');
+                            }
+                        }
+
+                        // Now delete the DB record for this productfile using ProductFileTable::delete(),
+                        // which also handles its related productdownloads and productdownloadlogs records.
+                        $productFileTableForDelete = new ProductFileTable($dbHost); // New instance to avoid issues with loaded state if any
+                        if (!$productFileTableForDelete->delete($fileRecord->productfile_id)) {
+                             $this->setError(Text::sprintf('COM_TIENDA_ERROR_DELETING_PRODUCTFILE_DB_RECORD', $fileRecord->productfile_id) . ': ' . $productFileTableForDelete->getError());
+                             $success = false;
+                        }
+                    }
+                }
+
+                // TODO: Implement cascading delete for other complex related data (e.g., relations, product comments if not handled by their own FK constraints).
+                // Basic xrefs, prices, quantities, EAV values, and product files (DB & physical) are now handled.
 
                 if (!$table->delete($pk)) {
                     $this->setError($table->getError());

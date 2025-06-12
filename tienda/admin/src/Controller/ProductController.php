@@ -17,6 +17,9 @@ use Joomla\CMS\Factory\Factory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Router\Route;
 use Joomla\CMS\MVC\Model\BaseDatabaseModel; // For postSaveHook type hinting
+use Joomla\CMS\Session\Session;
+use Joomla\CMS\Filesystem\File;
+use Dioscouri\Component\Tienda\Administrator\Helper\ProductHelper;
 
 class ProductController extends FormController
 {
@@ -83,5 +86,63 @@ class ProductController extends FormController
         }
 
         return parent::getModel($name, $prefix, $config);
+    }
+
+    public function ajaxDeleteGalleryImage()
+    {
+        $app = Factory::getApplication();
+        $response = ['success' => false, 'message' => ''];
+
+        if (!Session::checkToken('post')) { // Assuming POST request for AJAX delete and token is passed in POST data
+            $response['message'] = Text::_('JINVALID_TOKEN');
+            $app->setHeader('Content-Type', 'application/json');
+            echo json_encode($response);
+            $app->close();
+            return;
+        }
+
+        $productId = $app->input->getInt('product_id', 0);
+        // Permission check
+        if (!Factory::getApplication()->getIdentity()->authorise('core.edit', 'com_tienda.product.' . $productId) &&
+            !Factory::getApplication()->getIdentity()->authorise('core.create', 'com_tienda')) { // core.create for new products not yet saved but might have draft gallery
+            $response['message'] = Text::_('JLIB_RULES_NOT_ALLOWED');
+            $app->setHeader('Content-Type', 'application/json', true);
+            echo json_encode($response);
+            $app->close();
+        }
+
+        $filename  = $app->input->getString('filename', '');
+
+        if (!$productId || empty($filename)) {
+            $response['message'] = Text::_('COM_TIENDA_ERROR_MISSING_PRODUCT_OR_FILENAME');
+            $app->setHeader('Content-Type', 'application/json', true);
+            echo json_encode($response);
+            $app->close();
+        }
+
+        try {
+            if (ProductHelper::deleteGalleryImage($productId, $filename)) {
+                $response['success'] = true;
+                $response['message'] = Text::sprintf('COM_TIENDA_GALLERY_IMAGE_DELETED_SUCCESS', $filename);
+            } else {
+                $response['message'] = Text::sprintf('COM_TIENDA_GALLERY_IMAGE_DELETED_ERROR', $filename);
+                // Check for more specific messages enqueued by the helper
+                $messages = $app->getMessageQueue();
+                if (!empty($messages)) {
+                    foreach($messages as $msg) {
+                        if($msg['type'] === 'error' || $msg['type'] === 'warning') { // Concatenate error/warning messages
+                           $response['message'] .= ' - ' . $msg['message'];
+                        }
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            // Log the exception $e->getMessage() for debugging
+            $response['message'] = Text::sprintf('COM_TIENDA_GALLERY_IMAGE_DELETED_ERROR_EXCEPTION', $filename);
+        }
+
+        $app->setHeader('Content-Type', 'application/json', true);
+        echo json_encode($response);
+        $app->close(); // Outputs JSON and exits
     }
 }
