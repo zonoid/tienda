@@ -22,6 +22,7 @@ use Joomla\CMS\Table\Table; // Added
 use Joomla\Utilities\ArrayHelper; // Added
 use Joomla\CMS\Filesystem\File;
 use Dioscouri\Component\Tienda\Administrator\Table\ProductFileTable;
+use Dioscouri\Component\Tienda\Administrator\Table\ProductRelationTable;
 
 class ProductsModel extends ListModel
 {
@@ -590,8 +591,62 @@ class ProductsModel extends ListModel
                     }
                 }
 
-                // TODO: Implement cascading delete for other complex related data (e.g., relations, product comments if not handled by their own FK constraints).
-                // Basic xrefs, prices, quantities, EAV values, and product files (DB & physical) are now handled.
+                // Delete Product Relations (where this product is either product_id_from or product_id_to)
+                try {
+                    $db = $this->getDbo();
+                    $relationTable = new ProductRelationTable($db);
+
+                    // Delete where product_id_from = $pk
+                    $queryDeleteFrom = $db->getQuery(true)
+                        ->delete($relationTable->getTableName())
+                        ->where($db->quoteName('product_id_from') . ' = ' . (int)$pk);
+                    $db->setQuery($queryDeleteFrom)->execute();
+
+                    // Delete where product_id_to = $pk
+                    $queryDeleteTo = $db->getQuery(true)
+                        ->delete($relationTable->getTableName())
+                        ->where($db->quoteName('product_id_to') . ' = ' . (int)$pk);
+                    $db->setQuery($queryDeleteTo)->execute();
+
+                } catch (\Exception $e) {
+                    $this->setError(Text::sprintf('COM_TIENDA_ERROR_DELETING_PRODUCT_RELATIONS', $pk) . ': ' . $e->getMessage());
+                    $success = false; // Mark as not fully successful
+                }
+
+                // Delete Product Comments for this product
+                try {
+                    $db = $this->getDbo();
+                    $commentsQuery = $db->getQuery(true)
+                        ->select($db->quoteName('productcomment_id'))
+                        ->from($db->quoteName('#__tienda_productcomments'))
+                        ->where($db->quoteName('product_id') . ' = ' . (int)$pk);
+                    $db->setQuery($commentsQuery);
+                    $commentIds = $db->loadColumn();
+
+                    if (!empty($commentIds)) {
+                        // Use application's MVC factory to get model to avoid direct instantiation issues
+                        // Ensure the model name 'ProductComments' matches the class ProductCommentsModel
+                        $commentModel = Factory::getApplication()->bootComponent('com_tienda')->getMVCFactory()->createModel('ProductComments', 'Administrator', ['ignore_request' => true]);
+                        if ($commentModel instanceof \Dioscouri\Component\Tienda\Administrator\Model\ProductCommentsModel) {
+                            if (!$commentModel->delete($commentIds)) { // Pass by value, model expects array
+                                // Collect errors from comment model if any
+                                foreach($commentModel->getErrors() as $errMsg) { $this->setError($errMsg); }
+                                $success = false; // Mark overall product delete as not fully successful
+                                Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_DELETING_PRODUCT_COMMENTS_FOR_PRODUCT', $pk), 'error');
+                            }
+                        } else {
+                             $this->setError(Text::sprintf('COM_TIENDA_ERROR_LOADING_PRODUCTCOMMENTS_MODEL_FOR_PRODUCT', $pk));
+                             $success = false;
+                        }
+                    }
+                } catch (\Exception $e) {
+                    $this->setError(Text::sprintf('COM_TIENDA_ERROR_DELETING_PRODUCT_COMMENTS_FOR_PRODUCT', $pk) . ': ' . $e->getMessage());
+                    $success = false;
+                }
+
+                // TODO: Implement cascading delete for other complex related data.
+                // Basic xrefs, prices, quantities, EAV values, product files (DB & physical), product relations, and product comments are now handled.
+                // (Note: comment helpfulness & product rating updates are TODOs within ProductCommentsModel::delete)
 
                 if (!$table->delete($pk)) {
                     $this->setError($table->getError());

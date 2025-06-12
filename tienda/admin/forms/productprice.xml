@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<form>
+    <fieldset name="productprice_details">
+        <field
+            name="product_price_id"
+            type="hidden"
+        />
+        <field
+            name="product_id"
+            type="hidden"
+            comment="Automatically set by the model during save"
+        />
+        <field
+            name="group_id"
+            type="usergroup"
+            label="COM_TIENDA_USER_GROUP_LABEL"
+            description="COM_TIENDA_PRICE_USER_GROUP_DESC"
+            default="0"
+            required="true"
+            >
+            <option value="0">COM_TIENDA_ALL_USER_GROUPS</option>
+        </field>
+        <field
+            name="product_price"
+            type="number"
+            label="COM_TIENDA_PRICE_LABEL"
+            description="COM_TIENDA_PRICE_VALUE_DESC"
+            required="true"
+            step="any"
+            min="0"
+        />
+        <field
+            name="price_quantity_start"
+            type="number"
+            label="COM_TIENDA_PRICE_QUANTITY_START_LABEL"
+            description="COM_TIENDA_PRICE_QUANTITY_START_DESC"
+            default="1"
+            min="1"
+            step="1"
+        />
+        <field
+            name="price_quantity_end"
+            type="number"
+            label="COM_TIENDA_PRICE_QUANTITY_END_LABEL"
+            description="COM_TIENDA_PRICE_QUANTITY_END_DESC"
+            default="0"
+            min="0"
+            step="1"
+            comment="COM_TIENDA_PRICE_QUANTITY_END_COMMENT"
+        />
+        <field
+            name="product_price_startdate"
+            type="calendar"
+            label="COM_TIENDA_PRICE_START_DATE_LABEL"
+            description="COM_TIENDA_PRICE_START_DATE_DESC"
+            format="%Y-%m-%d %H:%M:%S"
+            timeformat="24"
+            showtime="true"
+            todaybutton="true"
+            weeknumbers="true"
+        />
+        <field
+            name="product_price_enddate"
+            type="calendar"
+            label="COM_TIENDA_PRICE_END_DATE_LABEL"
+            description="COM_TIENDA_PRICE_END_DATE_DESC"
+            format="%Y-%m-%d %H:%M:%S"
+            timeformat="24"
+            showtime="true"
+            todaybutton="true"
+            weeknumbers="true"
+        />
+    </fieldset>
+</form>

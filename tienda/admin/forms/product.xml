@@ -29,9 +29,31 @@
     </fieldset>
 
     <fieldset name="pricing" label="COM_TIENDA_PRICING">
-        <field name="product_price" type="number" label="COM_TIENDA_BASE_PRICE" description="COM_TIENDA_BASE_PRICE_DESC" step="any" />
-        <!-- TODO: This single price field is a simplification. Full price management (TiendaTableProductPrices) needs a custom form field type or subform -->
-        <field name="tax_class_id" type="sql" label="COM_TIENDA_TAX_CLASS" query="SELECT tax_class_id AS value, tax_class_name AS tax_class_id FROM #__tienda_taxclasses ORDER BY tax_class_name">
+        <!-- <field name="product_price" type="number" label="COM_TIENDA_BASE_PRICE" description="COM_TIENDA_BASE_PRICE_DESC" step="any" /> -->
+        <!-- Base price could be handled by a price record with no specific group/quantity/date, or a separate field if always needed -->
+
+        <field
+            name="product_prices"
+            type="subform"
+            label="COM_TIENDA_PRODUCT_PRICES_LABEL"
+            description="COM_TIENDA_PRODUCT_PRICES_DESC"
+            layout="joomla.form.field.subform.repeatable-table"
+            formsource="administrator/components/com_tienda/forms/productprice.xml"
+            multiple="true"
+            min="0"
+            groupByFieldset="false"
+            buttons="add,remove"
+            >
+            <form>
+            </form>
+        </field>
+
+        <field
+            name="tax_class_id"
+            type="sql"
+            label="COM_TIENDA_TAX_CLASS"
+            description="COM_TIENDA_TAX_CLASS_DESC"
+            query="SELECT tax_class_id AS value, tax_class_name AS tax_class_id FROM #__tienda_taxclasses ORDER BY tax_class_name">
             <option value="">JOPTION_SELECT_TAX_CLASS</option>
         </field>
     </fieldset>
@@ -41,8 +63,23 @@
             <option value="1">JYES</option>
             <option value="0">JNO</option>
         </field>
-        <field name="product_quantity" type="number" label="COM_TIENDA_BASE_QUANTITY_LABEL" description="COM_TIENDA_BASE_QUANTITY_DESC" step="1" />
-        <!-- TODO: Quantity per attribute combination needs custom field type or subform -->
+        <!-- <field name="product_quantity" type="number" label="COM_TIENDA_BASE_QUANTITY_LABEL" description="COM_TIENDA_BASE_QUANTITY_DESC" step="1" /> -->
+        <!-- Basic quantity is now managed by the subform below if no attributes are involved -->
+        <field
+            name="product_quantities"
+            type="subform"
+            label="COM_TIENDA_PRODUCT_QUANTITIES_LABEL"
+            description="COM_TIENDA_PRODUCT_QUANTITIES_DESC"
+            layout="joomla.form.field.subform.repeatable-table"
+            formsource="administrator/components/com_tienda/forms/productquantity.xml"
+            multiple="true"
+            min="0"
+            groupByFieldset="false"
+            buttons="add,remove"
+            >
+            <form>
+            </form>
+        </field>
         <field name="product_ships" type="radio" default="0" label="COM_TIENDA_REQUIRES_SHIPPING_LABEL" description="COM_TIENDA_REQUIRES_SHIPPING_DESC" class="btn-group btn-group-yesno">
             <option value="1">JYES</option>
             <option value="0">JNO</option>

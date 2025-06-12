@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<form>
+    <fieldset name="productquantity_details">
+        <field
+            name="productquantity_id"
+            type="hidden"
+        />
+        <field
+            name="product_id"
+            type="hidden"
+            comment="Automatically set by the model during save"
+        />
+        <field
+            name="product_attributes_display"
+            type="text"
+            label="COM_TIENDA_PRODUCT_ATTRIBUTE_COMBINATION_LABEL"
+            description="COM_TIENDA_PRODUCT_ATTRIBUTE_COMBINATION_DESC"
+            readonly="true"
+            comment="COM_TIENDA_PRODUCT_ATTRIBUTE_COMBINATION_COMMENT"
+        />
+        <field
+            name="product_attributes"
+            type="hidden"
+            comment="Comma-separated sorted IDs of productattributeoptions. Set by JS or if display field made editable."
+        />
+        <field
+            name="quantity"
+            type="number"
+            label="COM_TIENDA_QUANTITY_LABEL"
+            description="COM_TIENDA_STOCK_LEVEL_FOR_COMBINATION_DESC"
+            required="true"
+            step="1"
+            min="0"
+        />
+        <field
+            name="vendor_id"
+            type="hidden"
+            default="0"
+        />
+    </fieldset>
+</form>

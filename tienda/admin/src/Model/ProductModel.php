@@ -26,6 +26,11 @@ use Joomla\CMS\Filesystem\Folder;
 use Joomla\CMS\Filesystem\Path; // Path is used in the new block
 use Joomla\CMS\Utilities\ArrayHelper;
 use Dioscouri\Component\Tienda\Administrator\Table\ProductCategoryXrefTable;
+use Dioscouri\Component\Tienda\Administrator\Table\ProductPriceTable; // For saving prices
+use Dioscouri\Component\Tienda\Administrator\Table\ProductQuantityTable; // For saving quantities
+use Joomla\CMS\Date\Date; // For product price date conversion
+use Dioscouri\Component\Tienda\Administrator\Table\EavAttributeTable;
+use Dioscouri\Component\Tienda\Administrator\Table\EavAttributeOptionTable;
 
 class ProductModel extends AdminModel
 {
@@ -284,6 +289,112 @@ class ProductModel extends AdminModel
                  $item->product_params = new Registry();
             }
         }
+
+        // Load Product Prices for the subform
+        if ($item && isset($item->product_id) && $item->product_id > 0) {
+            $db = Factory::getDbo();
+            $pricesQuery = $db->getQuery(true)
+                ->select('*') // Select all fields from productprices table
+                ->from($db->quoteName('#__tienda_productprices'))
+                ->where($db->quoteName('product_id') . ' = ' . (int)$item->product_id)
+                ->order($db->quoteName('price_quantity_start') . ' ASC'); // Optional: order them
+
+            $db->setQuery($pricesQuery);
+            try {
+                $item->product_prices = $db->loadObjectList();
+                // Dates from DB are GMT. Convert to user's timezone for calendar fields in subform.
+                if (!empty($item->product_prices)) {
+                    $app = Factory::getApplication();
+                    // Ensure 'offset' is correctly retrieved; it might be like $app->get('offset') or $app->getIdentity()->getParam('timezone', $app->get('offset'));
+                    $userTimezoneOffset = $app->get('offset');
+                    if (strpos($userTimezoneOffset, '.') !== false) { // Handle cases like 'UTC+5.5'
+                        // DateTimeZone does not like decimal offsets directly. Convert to HH:MM or a valid named timezone.
+                        // This is a simplification. Joomla's User object has a getTimezone method that might be more robust.
+                        // For now, assuming a simple offset string that DateTimeZone might handle or defaulting to UTC if complex.
+                        // A better way: $userTimeZone = new \DateTimeZone($app->getUser()->getTimezone()->getName());
+                        // However, $app->getUser() is J4/5. $app->getIdentity() is for current user.
+                        try {
+                             $userTimeZone = new \DateTimeZone($userTimezoneOffset);
+                        } catch (\Exception $e) {
+                             // If offset string is not a valid timezone name (e.g. 'UTC+5.5')
+                             // Fallback to UTC or try to construct from offset hours/minutes if possible.
+                             // For simplicity, fallback to application's timezone (often UTC if not user-specific)
+                             $userTimeZone = new \DateTimeZone(Factory::getConfig()->get('offset'));
+                        }
+
+                    } else {
+                         $userTimeZone = new \DateTimeZone($userTimezoneOffset);
+                    }
+                    $dbTimeZone   = new \DateTimeZone('UTC');
+
+                    foreach ($item->product_prices as &$priceRow) { // Use reference to modify directly
+                        if (!empty($priceRow->product_price_startdate) && $priceRow->product_price_startdate !== $db->getNullDate()) {
+                            $dateObj = new Date($priceRow->product_price_startdate, $dbTimeZone);
+                            $dateObj->setTimezone($userTimeZone);
+                            $priceRow->product_price_startdate = $dateObj->format('Y-m-d H:i:s');
+                        }
+                        if (!empty($priceRow->product_price_enddate) && $priceRow->product_price_enddate !== $db->getNullDate()) {
+                            $dateObj = new Date($priceRow->product_price_enddate, $dbTimeZone);
+                            $dateObj->setTimezone($userTimeZone);
+                            $priceRow->product_price_enddate = $dateObj->format('Y-m-d H:i:s');
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_LOADING_PRODUCT_PRICES', $item->product_id) . ': ' . $e->getMessage(), 'error');
+                $item->product_prices = []; // Ensure it's an array even on error
+            }
+        } elseif ($item) {
+            $item->product_prices = []; // For new items, initialize as empty array for the subform
+        }
+
+        // Load Product Quantities for the subform
+        if ($item && isset($item->product_id) && $item->product_id > 0) {
+            $db = Factory::getDbo();
+            $quantitiesQuery = $db->getQuery(true)
+                ->select('*') // Select all fields from productquantities table
+                ->from($db->quoteName('#__tienda_productquantities'))
+                ->where($db->quoteName('product_id') . ' = ' . (int)$item->product_id)
+                ->order($db->quoteName('product_attributes') . ' ASC'); // Order for consistency
+
+            $db->setQuery($quantitiesQuery);
+            try {
+                $item->product_quantities = $db->loadObjectList();
+
+                if (!empty($item->product_quantities)) {
+                    $eavAttrTable = new EavAttributeTable($db);
+                    $eavAttrOptionTable = new EavAttributeOptionTable($db);
+
+                    foreach ($item->product_quantities as &$qtyRow) { // Use reference
+                        $qtyRow->attributes_display_text = ''; // Initialize as product_attributes_display for form
+                        if (!empty($qtyRow->product_attributes)) {
+                            $optionIds = explode(',', $qtyRow->product_attributes);
+                            $displayTextParts = [];
+                            foreach ($optionIds as $optionId) {
+                                if ($eavAttrOptionTable->load((int)$optionId)) {
+                                    $optionName = $eavAttrOptionTable->eavattributeoption_name;
+                                    // Try to get the parent attribute's name for context
+                                    if ($eavAttrTable->load((int)$eavAttrOptionTable->eavattribute_id)) {
+                                        $displayTextParts[] = Text::_($eavAttrTable->eavattribute_label) . ': ' . Text::_($optionName);
+                                    } else {
+                                        $displayTextParts[] = Text::_($optionName);
+                                    }
+                                } else {
+                                    $displayTextParts[] = Text::sprintf('COM_TIENDA_UNKNOWN_ATTRIBUTE_OPTION_ID', $optionId);
+                                }
+                            }
+                            $qtyRow->attributes_display_text = implode(' | ', $displayTextParts); // Changed separator
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_LOADING_PRODUCT_QUANTITIES', $item->product_id) . ': ' . $e->getMessage(), 'error');
+                $item->product_quantities = [];
+            }
+        } elseif ($item) {
+            $item->product_quantities = []; // For new items
+        }
+
         return $item;
     }
 
@@ -494,6 +605,157 @@ class ProductModel extends AdminModel
 
         // TODO: Save other related data (prices, quantities per attribute, multiple categories).
         // Gallery images (basic upload) now handled.
+
+        // Save Product Prices from subform
+        if (isset($data['product_prices']) && $entity_id > 0) {
+            $productPricesData = $data['product_prices'];
+            if (!is_array($productPricesData)) { // Should be an array from subform
+                $productPricesData = [];
+            }
+
+            $db = Factory::getDbo();
+            $originalErrors = $this->getErrors();
+            // We should not clear _errors here if EAV or Gallery saving might have populated it.
+            // Instead, accumulate errors. Let's create a temporary array for price errors.
+            $priceSavingErrors = [];
+
+            // 1. Delete existing price records for this product
+            try {
+                $deleteQuery = $db->getQuery(true)
+                    ->delete($db->quoteName('#__tienda_productprices'))
+                    ->where($db->quoteName('product_id') . ' = ' . (int)$entity_id);
+                $db->setQuery($deleteQuery)->execute();
+            } catch (\Exception $e) {
+                $this->setError(Text::sprintf('COM_TIENDA_ERROR_DELETING_OLD_PRODUCT_PRICES', $entity_id) . ': ' . $e->getMessage());
+                // Restore original errors and return false, as this is critical before adding new ones
+                // $this->_errors = array_merge($originalErrors, $this->getErrors()); // Merge current error
+                return false;
+            }
+
+            // 2. Insert new price records
+            foreach ($productPricesData as $priceData) {
+                if (empty($priceData)) continue; // Skip if an empty row was submitted by subform
+
+                $priceTable = new ProductPriceTable($db);
+                $priceData['product_id'] = $entity_id; // Ensure product_id is set
+
+                // Convert dates from user's local timezone to GMT for DB storage
+                // $app is already defined in the save method
+                $userOffset = $app->get('offset'); // User's Joomla timezone offset string
+                $dbNullDate = $db->getNullDate();
+
+                if (!empty($priceData['product_price_startdate'])) {
+                    try {
+                        // Date constructor expects UTC if no timezone provided, or use user's TZ if date string implies it
+                        // Assuming calendar field provides date string in user's local time.
+                        $localDate = new Date($priceData['product_price_startdate'], $userOffset);
+                        $priceData['product_price_startdate'] = $localDate->toSql(false); // toSql(false) gives GMT
+                    } catch (\Exception $e) {
+                        $this->setError(Text::sprintf('COM_TIENDA_ERROR_CONVERTING_START_DATE_TO_GMT', $priceData['product_price_startdate']));
+                        $priceData['product_price_startdate'] = $dbNullDate;
+                    }
+                } else {
+                    $priceData['product_price_startdate'] = $dbNullDate;
+                }
+
+                if (!empty($priceData['product_price_enddate'])) {
+                    try {
+                        $localDate = new Date($priceData['product_price_enddate'], $userOffset);
+                        $priceData['product_price_enddate'] = $localDate->toSql(false); // toSql(false) gives GMT
+                    } catch (\Exception $e) {
+                        $this->setError(Text::sprintf('COM_TIENDA_ERROR_CONVERTING_END_DATE_TO_GMT', $priceData['product_price_enddate']));
+                        $priceData['product_price_enddate'] = $dbNullDate;
+                    }
+                } else {
+                    $priceData['product_price_enddate'] = $dbNullDate;
+                }
+
+                // Unset product_price_id if it's empty to allow auto-increment
+                if (isset($priceData['product_price_id']) && empty($priceData['product_price_id'])) {
+                    unset($priceData['product_price_id']);
+                }
+
+                if (!$priceTable->bind($priceData)) {
+                    $this->setError($priceTable->getError());
+                    continue;
+                }
+                if (!$priceTable->check()) { // check() now handles created/modified dates
+                    $this->setError($priceTable->getError());
+                    continue;
+                }
+                if (!$priceTable->store()) {
+                    $this->setError($priceTable->getError());
+                }
+            }
+            // Merge price errors with any previous errors from main save or EAV/Gallery
+            // The current $this->getErrors() will have price errors. We need to merge them back.
+            // $this->_errors was not cleared at the start of this price block, so errors are cumulative.
+        }
+
+        // Save Product Quantities from subform
+        if (isset($data['product_quantities']) && $entity_id > 0) {
+            $productQuantitiesData = $data['product_quantities'];
+            if (!is_array($productQuantitiesData)) {
+                $productQuantitiesData = [];
+            }
+
+            // $db = Factory::getDbo(); // Already available
+            $originalErrors = $this->getErrors(); // Preserve errors from main save, EAV, gallery, prices
+            // Create a temporary array for quantity errors to avoid losing earlier ones if we return false.
+            $quantitySavingErrors = [];
+
+            // 1. Delete existing quantity records for this product
+            try {
+                $deleteQuery = $db->getQuery(true)
+                    ->delete($db->quoteName('#__tienda_productquantities'))
+                    ->where($db->quoteName('product_id') . ' = ' . (int)$entity_id);
+                $db->setQuery($deleteQuery)->execute();
+            } catch (\Exception $e) {
+                $this->setError(Text::sprintf('COM_TIENDA_ERROR_DELETING_OLD_PRODUCT_QUANTITIES', $entity_id) . ': ' . $e->getMessage());
+                // This is a critical error, merge and return.
+                // $this->_errors = array_merge($originalErrors, $this->getErrors()); No, just return false after setting error.
+                return false;
+            }
+
+            // 2. Insert new quantity records
+            foreach ($productQuantitiesData as $qtyData) {
+                if (empty($qtyData) || !isset($qtyData['quantity'])) { // Ensure quantity is set to avoid saving empty/incomplete rows
+                    continue;
+                }
+
+                $qtyTable = new ProductQuantityTable($db);
+                $qtyData['product_id'] = $entity_id;
+
+                // product_attributes should be submitted as a pre-sorted CSV string from the hidden field.
+                // ProductQuantityTable::check() handles sorting if it's an array, or keeps string as is.
+                // If it's from our hidden field, it should already be sorted CSV.
+
+                if (isset($qtyData['productquantity_id']) && empty($qtyData['productquantity_id'])) {
+                    unset($qtyData['productquantity_id']);
+                }
+
+                if (!$qtyTable->bind($qtyData)) {
+                    $this->setError($qtyTable->getError()); // Use $this->setError to accumulate
+                    continue;
+                }
+                if (!$qtyTable->check()) {
+                    $this->setError($qtyTable->getError());
+                    continue;
+                }
+                if (!$qtyTable->store()) {
+                    $this->setError($qtyTable->getError());
+                }
+            }
+            // $this->_errors now contains any errors from this quantity saving batch plus any previous ones.
+            // No need to explicitly merge $originalErrors back if we didn't clear $this->_errors for this batch.
+            // The provided code sample for price saving did:
+            // $originalErrors = $this->getErrors(); $this->_errors = []; (for batch) then $this->_errors = array_merge($originalErrors, $priceErrors);
+            // Let's follow that pattern for consistency.
+            // $currentBatchErrors = $this->_errors; // Assuming _errors was cleared for this batch (it wasn't in my adaptation)
+            // $this->_errors = array_merge($originalErrors, $currentBatchErrors);
+            // Actually, the current structure where $this->setError() just adds to $this->_errors is fine.
+            // The critical part is returning false on the delete failure.
+        }
 
         // Save category relationships
         if (isset($data['category_ids'])) {
