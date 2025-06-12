@@ -183,32 +183,76 @@ class ProductsModel extends ListModel
 
 
         // ORDERING
-        // list.ordering and list.direction are set in populateState by parent::populateState
-        $orderCol = $this->state->get('list.ordering', 'tbl.product_name'); // Changed default from product_id
-        $orderDirn = $this->state->get('list.direction', 'ASC');
-
-        // Handle special ordering cases like 'price' or 'product_quantity' which are aliases
-        if ($orderCol === 'price') {
-            $orderCol = 'calculated_price';
-        } elseif ($orderCol === 'product_quantity') {
-            $orderCol = 'current_stock';
+        $ordering = $this->state->get('list.ordering', 'tbl.product_name');
+        $direction = $this->state->get('list.direction', 'ASC');
+        $direction = strtoupper($direction);
+        if ($direction !== 'ASC' && $direction !== 'DESC') {
+            $direction = 'ASC';
         }
-        $orderColFromState = $this->state->get('list.ordering', 'tbl.product_name');
-        $orderDirnFromState = $this->state->get('list.direction', 'ASC');
 
-        // Translate aliases from XML sort options to actual query columns/aliases
-        if ($orderColFromState === 'calculated_price') {
-            $orderCol = 'calculated_price';
-        } elseif ($orderColFromState === 'current_stock') {
-            $orderCol = 'current_stock';
+        if (strpos($ordering, 'eav_') === 0) {
+            $eavAlias = substr($ordering, 4); // Remove 'eav_'
+
+            // Get attribute_id and type for this alias
+            $attrQuery = $db->getQuery(true)
+                ->select([$db->quoteName('eavattribute_id'), $db->quoteName('eavattribute_type')])
+                ->from($db->quoteName('#__tienda_eavattributes'))
+                ->where($db->quoteName('eavattribute_alias') . ' = ' . $db->quote($eavAlias))
+                ->where($db->quoteName('eaventity_type') . ' = ' . $db->quote('products'));
+            $db->setQuery($attrQuery, 0, 1);
+            $eavAttributeDetails = $db->loadObject();
+
+            if ($eavAttributeDetails) {
+                $valTableAlias = 'eavsort_val'; // Use a unique alias for sorting JOINs
+                // Sanitize eavattribute_type before using in table name
+                $eavType = strtolower(preg_replace('/[^A-Z0-9_]/i', '', $eavAttributeDetails->eavattribute_type));
+
+                if(empty($eavType)) {
+                     Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_EAV_SORT_ATTR_INVALID_TYPE', $eavAlias, $eavAttributeDetails->eavattribute_type), 'warning');
+                     // Fallback to default sort
+                     $query->order($db->quoteName('tbl.product_name') . ' ' . $direction);
+                } else {
+                    $valueTable = '#__tienda_eavvalues' . $eavType;
+                    // Check if this join already exists from filtering to avoid duplicate aliases
+                    // This is a simplified check; a more robust way is to track joined aliases.
+                    // For now, we assume it might not exist or a left join is acceptable even if it does.
+                    // A more robust check would inspect $query->dump()->join
+
+                    // Check if a similar join for filtering might exist to reuse it.
+                    // This is tricky because filter joins might be INNER and sort joins should be LEFT.
+                    // For simplicity, always add a new LEFT JOIN for sorting. If performance becomes an issue,
+                    // this area would need optimization to reuse existing compatible JOINs.
+                    $query->join('LEFT', $db->quoteName($valueTable) . ' AS ' . $db->quoteName($valTableAlias)
+                        . ' ON ' . $db->quoteName($valTableAlias . '.eaventity_id') . ' = tbl.product_id'
+                        . ' AND ' . $db->quoteName($valTableAlias . '.eavattribute_id') . ' = ' . (int)$eavAttributeDetails->eavattribute_id);
+
+                    $query->order($db->quoteName($valTableAlias . '.eavvalue_value') . ' ' . $direction);
+                }
+            } else {
+                Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_EAV_SORT_ATTR_NOT_FOUND', $eavAlias), 'warning');
+                // Fallback to default sort if EAV attribute not found
+                 $query->order($db->quoteName('tbl.product_name') . ' ' . $direction);
+            }
+        } else if ($ordering) {
+            // Handle special aliases like 'price' or 'quantity'
+            if ($ordering === 'price' || $ordering === 'calculated_price') {
+                $query->order($db->quoteName('calculated_price') . ' ' . $direction);
+            } elseif ($ordering === 'product_quantity' || $ordering === 'current_stock') {
+                $query->order($db->quoteName('current_stock') . ' ' . $direction);
+            } else {
+                // Standard column ordering (ensure it's a valid column from tbl or joined tables)
+                // Basic validation: check if it contains 'tbl.' or is a known alias
+                if (strpos($ordering, 'tbl.') === 0 || in_array($ordering, ['category_name', 'manufacturer_name'])) {
+                     $query->order($db->escape($ordering) . ' ' . $db->escape($direction));
+                } else {
+                    // Fallback to default sort if ordering column is not recognized/unsafe
+                    $query->order($db->quoteName('tbl.product_name') . ' ' . $db->escape($direction));
+                }
+            }
         } else {
-            // Ensure it's a valid column from tbl or joined tables to prevent SQL injection
-            // For simplicity, assuming $orderColFromState is one of the direct table columns like tbl.product_name, tbl.product_id etc.
-            // More robust validation might be needed here if $orderColFromState can be arbitrary.
-            $orderCol = $orderColFromState;
+            // Default sort order if nothing else specified
+            $query->order($db->quoteName('tbl.product_name') . ' ASC');
         }
-
-        $query->order($db->escape($orderCol) . ' ' . $db->escape($orderDirnFromState));
 
         // Example EAV Filtering (simplified - assumes EAV aliases match filter names like 'eav_color')
         $eavFilters = [

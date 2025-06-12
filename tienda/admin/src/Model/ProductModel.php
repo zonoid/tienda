@@ -162,6 +162,35 @@ class ProductModel extends AdminModel
                                              ' default="" label="' . $fieldLabel . '"'.
                                              ' description="' . $fieldDesc . '">' . $fieldOptionsXml . '</field>';
                             break;
+                        case 'checkboxes':
+                        case 'checkboxgroup':
+                        case 'multiselect': // Assuming this implies checkboxes for multiple selection
+                            $fieldType = 'checkboxes'; // Joomla JForm field type
+                            $fieldOptionsXml = '';
+                            // Fetch options for this attribute (similar to list/radio)
+                            $db = Factory::getDbo();
+                            $optionsQuery = $db->getQuery(true)
+                                ->select([$db->quoteName('eavattributeoption_value'), $db->quoteName('eavattributeoption_name')])
+                                ->from($db->quoteName('#__tienda_eavattributeoptions'))
+                                ->where($db->quoteName('eavattribute_id') . ' = ' . (int)$eavAttribute->eavattribute_id)
+                                ->order($db->quoteName('ordering') . ' ASC');
+                            $db->setQuery($optionsQuery);
+                            try {
+                                $eavOptions = $db->loadObjectList();
+                                if (!empty($eavOptions)) {
+                                    foreach ($eavOptions as $opt) {
+                                        $optionValue = htmlspecialchars($opt->eavattributeoption_value ?? $opt->eavattributeoption_name, ENT_QUOTES, 'UTF-8');
+                                        $optionText = htmlspecialchars(Text::_($opt->eavattributeoption_name), ENT_QUOTES, 'UTF-8');
+                                        $fieldOptionsXml .= '<option value="' . $optionValue . '">' . $optionText . '</option>';
+                                    }
+                                }
+                            } catch (\Exception $e) {
+                                Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_ERROR_LOADING_EAV_OPTIONS', $eavAttribute->eavattribute_alias) . ': ' . $e->getMessage(), 'error');
+                            }
+                            $currentFieldXml = '<field name="' . $fieldName . '[]" type="' . $fieldType . '"'. // Note: name appended with [] for multiple values
+                                             ' label="' . $fieldLabel . '"'.
+                                             ' description="' . $fieldDesc . '">' . $fieldOptionsXml . '</field>';
+                            break;
                         case 'boolean':
                         case 'bool':
                              $currentFieldXml = '<field name="' . $fieldName . '" type="radio" class="btn-group btn-group-yesno" default="0" '.
@@ -267,7 +296,30 @@ class ProductModel extends AdminModel
                         if (isset($eavAttribute->eavattribute_alias) && !empty($eavAttribute->eavattribute_alias)) {
                             $value = EavHelper::getAttributeValue($eavAttribute, $entityType, $item->product_id);
                             $alias = $eavAttribute->eavattribute_alias;
-                            $item->{$alias} = $value;
+
+                            $multiSelectTypes = ['checkboxes', 'checkboxgroup', 'multiselect']; // Match types used in save()
+                            if (in_array(strtolower($eavAttribute->eavattribute_type), $multiSelectTypes)) {
+                                if (is_string($value)) {
+                                    $decodedValue = json_decode($value, true); // true for associative array
+                                    if (json_last_error() === JSON_ERROR_NONE) {
+                                        $item->{$alias} = $decodedValue; // Assign the array
+                                    } else {
+                                        // Value might be a legacy non-JSON value, or empty/corrupt JSON.
+                                        // Assign empty array for the JForm checkboxes field to handle it gracefully.
+                                        $item->{$alias} = [];
+                                        if (!empty($value) && $value !== '[]') { // Avoid warning for empty valid JSON array string
+                                             Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_EAV_MULTISELECT_JSON_DECODE_ERROR', $alias, $value), 'warning');
+                                        }
+                                    }
+                                } elseif (empty($value)) {
+                                     $item->{$alias} = []; // Ensure it's an array for the form field if value is null/empty from DB
+                                } else {
+                                    // It's already an array or some other type, assign as is (though should be string from DB)
+                                    $item->{$alias} = $value;
+                                }
+                            } else {
+                                $item->{$alias} = $value; // For non-multiselect types, assign as is
+                            }
                         } else {
                             Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_DEBUG_EAV_ATTRIBUTE_MISSING_ALIAS', $eavAttribute->eavattribute_id ?? 'UNKNOWN'), 'warning'); // Debug
                         }
@@ -500,7 +552,27 @@ class ProductModel extends AdminModel
                             // For now, always update.
                         }
 
-                        $eavValueTable->eavvalue_value = $submitted_value;
+                        // Check if this EAV attribute type is a multi-select type like checkboxes
+                        $multiSelectTypes = ['checkboxes', 'checkboxgroup', 'multiselect']; // Add any other type aliases used for this
+                        if (in_array(strtolower($eavAttribute->eavattribute_type), $multiSelectTypes)) {
+                            if (is_array($submitted_value)) {
+                                // For multi-select types, store as JSON or a specific separator if preferred.
+                                // JSON is generally safer if option values might contain commas.
+                                $valueToStore = json_encode($submitted_value);
+                            } elseif (empty($submitted_value)) {
+                                $valueToStore = json_encode([]); // Store empty array as JSON for consistency
+                            } else {
+                                // If it's not an array but should be (e.g., single checkbox submitted not as array),
+                                // wrap it in an array before encoding. Or, this might indicate an issue.
+                                // For now, assume it's either an array or empty for multi-selects.
+                                $valueToStore = json_encode([$submitted_value]);
+                                Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_EAV_MULTISELECT_UNEXPECTED_SCALAR', $alias), 'warning');
+                            }
+                        } else {
+                            $valueToStore = $submitted_value;
+                        }
+
+                        $eavValueTable->eavvalue_value = $valueToStore; // Use $valueToStore now
 
                         if (!\$eavValueTable->check()) {
                             $this->setError(Text::sprintf('COM_TIENDA_EAV_VALUE_CHECK_FAILED', \$alias) . ': ' . \$eavValueTable->getError());

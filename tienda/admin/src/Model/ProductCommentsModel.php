@@ -18,6 +18,7 @@ use Joomla\CMS\Language\Text;
 use Joomla\CMS\Router\Route; // For generating links
 use Joomla\CMS\Utilities\ArrayHelper;
 use Dioscouri\Component\Tienda\Administrator\Table\ProductCommentTable; // Though getTable() is overridden, good for clarity if used elsewhere
+use Dioscouri\Component\Tienda\Administrator\Helper\ProductRatingHelper;
 
 class ProductCommentsModel extends ListModel
 {
@@ -200,45 +201,66 @@ class ProductCommentsModel extends ListModel
         ArrayHelper::toInteger($pks);
 
         $success = true;
-        $commentTable = $this->getTable(); // Gets ProductCommentTable due to override
-
-        // TODO: Collect product_ids from comments before deleting to update ratings later
-        // $productIdsToUpdate = [];
+        $commentTable = $this->getTable();
+        $affectedProductIds = [];
 
         foreach ($pks as $pk) {
-            if ($commentTable->load($pk)) {
-                // TODO: Delete related helpfulness records for this comment ($pk)
-                // Example: $this->deleteCommentHelpfulness($pk);
-                // Factory::getApplication()->enqueueMessage('TODO: Delete helpfulness for comment ID ' . $pk, 'notice');
+            if ($pk <= 0) {
+                $this->setError(Text::_('COM_TIENDA_INVALID_COMMENT_ID_FOR_DELETE'));
+                $success = false;
+                continue;
+            }
 
-                // Store product_id before deleting comment to update product rating later
-                // $product_id = $commentTable->product_id;
-                // if ($product_id && !in_array($product_id, $productIdsToUpdate)) {
-                //    $productIdsToUpdate[] = $product_id;
-                // }
+            if ($commentTable->load($pk)) {
+                $productIdForRatingUpdate = $commentTable->product_id;
+                if ($productIdForRatingUpdate && !in_array($productIdForRatingUpdate, $affectedProductIds)) {
+                    $affectedProductIds[] = $productIdForRatingUpdate;
+                }
+
+                // Delete related helpfulness records
+                if ($pk > 0) {
+                    try {
+                        $dbHelpfulness = $this->getDbo();
+                        $queryHelpfulness = $dbHelpfulness->getQuery(true)
+                            ->delete($dbHelpfulness->quoteName('#__tienda_productcommentshelpfulness'))
+                            ->where($dbHelpfulness->quoteName('productcomment_id') . ' = ' . (int)$pk);
+                        $dbHelpfulness->setQuery($queryHelpfulness)->execute();
+                    } catch (\Exception $e) {
+                        $this->setError(Text::sprintf('COM_TIENDA_ERROR_DELETING_COMMENT_HELPFULNESS', $pk) . ': ' . $e->getMessage());
+                        // Log error but continue, as main comment deletion is more critical.
+                        // $success = false; // Optionally make it critical
+                    }
+                }
 
                 if (!$commentTable->delete($pk)) {
                     $this->setError($commentTable->getError());
                     $success = false;
+                    // If comment deletion fails, remove its product_id from affected list if it was added
+                    if (($key = array_search($productIdForRatingUpdate, $affectedProductIds)) !== false) {
+                        unset($affectedProductIds[$key]);
+                    }
                 }
+                // No specific per-comment rating update TODO here anymore, will be handled in bulk
             } else {
                 $this->setError(Text::sprintf('COM_TIENDA_ITEM_LOAD_FAILED_FOR_DELETE', $pk));
                 $success = false;
             }
         }
 
-        // TODO: After all selected comments are successfully deleted,
-        // trigger product rating updates for all collected $productIdsToUpdate.
-        // if ($success && !empty($productIdsToUpdate)) {
-        //     foreach ($productIdsToUpdate as $pid) {
-        //         // Logic to tell ProductTable or ProductModel to update rating for $pid
-        //     }
-        //     Factory::getApplication()->enqueueMessage('TODO: Product ratings need update after comment deletion for relevant products.', 'notice');
-        // }
+        if ($success && !empty($affectedProductIds)) {
+            // Remove duplicate product IDs just in case
+            $uniqueProductIds = array_unique($affectedProductIds);
+            foreach ($uniqueProductIds as $prodId) {
+                if ($prodId > 0) {
+                    if (!ProductRatingHelper::updateProductOverallRating($prodId)) {
+                        Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_RATING_UPDATE_FAILED_FOR_PRODUCT_AFTER_COMMENT_DELETE', $prodId), 'warning');
+                        // This failure doesn't make the whole delete operation fail, but logs a warning.
+                    }
+                }
+            }
+        }
 
-        // Clear the cache for this model.
         $this->clearCache();
-
         return $success;
     }
 }

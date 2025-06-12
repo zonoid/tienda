@@ -138,6 +138,13 @@
             <option value="tbl.product_enabled DESC">COM_TIENDA_ENABLED_DESC</option>
             <option value="tbl.product_rating ASC">RATING_ASC</option>
             <option value="tbl.product_rating DESC">RATING_DESC</option>
+            <!-- EAV Sorting Options -->
+            <option value="eav_color ASC">COM_TIENDA_EAV_COLOR_ASC</option>
+            <option value="eav_color DESC">COM_TIENDA_EAV_COLOR_DESC</option>
+            <option value="eav_size ASC">COM_TIENDA_EAV_SIZE_ASC</option>
+            <option value="eav_size DESC">COM_TIENDA_EAV_SIZE_DESC</option>
+            <option value="eav_weight_custom ASC">COM_TIENDA_EAV_WEIGHT_CUSTOM_ASC</option>
+            <option value="eav_weight_custom DESC">COM_TIENDA_EAV_WEIGHT_CUSTOM_DESC</option>
         </field>
 
         <field

@@ -186,14 +186,73 @@ class CategoryHelper
      * @param bool $url True to return URL only
      * @return string HTML <img> tag or image URL
      */
-    public static function getImage($id, $by = 'id', $alt = '', $type = 'thumb', $url = false)
+    public static function getImage($id, $by = 'id', $alt = '', $type = 'thumb', $urlOnly = false)
     {
-        Factory::getApplication()->enqueueMessage('CategoryHelper::getImage needs refactoring for J5 and assumes CategoryModel/Table for image path resolution.', 'notice');
-        $placeholderSrc = Uri::root(true) . '/media/com_tienda/images/category_placeholder.png'; // Placeholder for category
-        if ($url) {
-            return $placeholderSrc;
+        $app = Factory::getApplication();
+        $categoryObject = null;
+        $image_ref = null;
+        $effective_alt = $alt ?: Text::_('COM_TIENDA_CATEGORY_IMAGE');
+
+        if (is_numeric($id) && $id > 0) {
+            $categoryObject = self::loadCategory((int)$id);
+            if (!\$categoryObject) {
+                // Category not found, will use placeholder
+            } else {
+                // Assuming category table has 'category_full_image' and potentially 'category_thumb_image'
+                // In Tienda's original CategoryTable, only 'category_image' (renamed from 'category_full_image' in some contexts) was standard.
+                // Let's assume 'category_full_image' is the property name on the loaded CategoryTable object.
+                $image_ref = (isset(\$categoryObject->category_full_image) ? \$categoryObject->category_full_image : null);
+                // Thumbs for categories might not have a separate field and might be in a 'thumbs' subdir by convention if they exist.
+                // For simplicity, this version won't distinguish between 'full' and 'thumb' for categories unless a 'category_thumb_image' field is confirmed.
+                $effective_alt = \$alt ?: (isset(\$categoryObject->category_name) ? \$categoryObject->category_name : Text::_('COM_TIENDA_CATEGORY_IMAGE'));
+            }
+        } elseif (is_string(\$id) && strpos(\$id, '.') !== false && strtolower(\$by) === 'filename') {
+            $image_ref = \$id;
         }
-        return '<img src="' . $placeholderSrc . '" alt="'.htmlspecialchars($alt ?: Text::_('COM_TIENDA_CATEGORY_IMAGE'), ENT_QUOTES, 'UTF-8').'" />';
+
+        $baseImagePath = JPATH_MEDIA . DIRECTORY_SEPARATOR . 'com_tienda' . DIRECTORY_SEPARATOR . 'categories' . DIRECTORY_SEPARATOR;
+        // If thumbs are stored in a 'thumbs' subdirectory by convention:
+        $thumbImagePath = \$baseImagePath . 'thumbs' . DIRECTORY_SEPARATOR;
+
+        $baseImageUrl  = Uri::root(true) . 'media/com_tienda/categories/';
+        $thumbBaseUrl = \$baseImageUrl . 'thumbs/';
+
+        $placeholderSrc = Uri::root(true) . 'media/com_tienda/images/category_placeholder.png'; // Ensure this placeholder exists
+
+        \$imageSrc = \$placeholderSrc;
+        \$finalPathToCheck = '';
+
+        if (!empty(\$image_ref)) {
+            if (filter_var(\$image_ref, FILTER_VALIDATE_URL)) {
+                \$imageSrc = \$image_ref;
+            } else {
+                if (strtolower(\$type) === 'thumb') {
+                    if (File::exists(\$thumbImagePath . \$image_ref)) {
+                        \$imageSrc = \$thumbBaseUrl . \$image_ref;
+                        \$finalPathToCheck = \$thumbImagePath . \$image_ref;
+                    } elseif (File::exists(\$baseImagePath . \$image_ref)) { // Fallback to full if thumb not found
+                        \$imageSrc = \$baseImageUrl . \$image_ref;
+                        \$finalPathToCheck = \$baseImagePath . \$image_ref;
+                    }
+                } else { // 'full' or any other type
+                    if (File::exists(\$baseImagePath . \$image_ref)) {
+                        \$imageSrc = \$baseImageUrl . \$image_ref;
+                        \$finalPathToCheck = \$baseImagePath . \$image_ref;
+                    }
+                }
+
+                if (\$imageSrc === \$placeholderSrc && \$finalPathToCheck !== '') { // Only enqueue if we attempted a file check
+                     Factory::getApplication()->enqueueMessage(Text::sprintf('COM_TIENDA_CATEGORY_IMAGE_FILE_NOT_FOUND', \$image_ref, \$finalPathToCheck), 'notice');
+                }
+            }
+        }
+
+        if (\$urlOnly) {
+            return \$imageSrc;
+        }
+
+        \$altText = htmlspecialchars(\$effective_alt, ENT_QUOTES, 'UTF-8');
+        return '<img src="' . \$imageSrc . '" alt="'. \$altText .'" />';
     }
 
     // Stub out other public static methods
